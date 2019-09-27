@@ -17,10 +17,8 @@ bool Button::isClicked(float xMousePos, float yMousePos){
 	if (xMousePos >= (*this).cx && xMousePos <= (*this).cx + (*this).width && yMousePos >= (*this).cy && yMousePos <= (*this).cy + (*this).height) {
 		return true;
 	}
-	else {
-		return false;
-	}
-	cout << xMousePos << " " << yMousePos;
+	return false;
+	
 }
 
 void Button::CreateButton(int btnId) {
