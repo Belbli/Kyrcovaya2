@@ -3,8 +3,8 @@
 #include<math.h>
 #include<vector>
 
-#define WIDTH 640
-#define HEIGHT 480
+#define WIDTH 480
+#define HEIGHT 640
 #define PLAYBTN 1
 #define RECORDSBTN 2
 #define EXITBTN 0
@@ -14,14 +14,15 @@ using namespace std;
 Button playBtn, recordsBtn, exitBtn;
 
 int x = -1, y = -1, btnWidth = 150, btnHeight = 40, btnState,btnStart, btnPressed = -1, plateWidth = 80, xLeftPlatePos, xRightPlatePos;
-int xMousePos = 0, yPlatePos = 400, xBallPos = 350, yBallPos = yPlatePos;
+int xMousePos = 0, yPlatePos = 3*HEIGHT/4, xBallPos = 350, yBallPos = yPlatePos, yPrevPlatePos = 0;
 int stateY = 1, stateX = 1;
 int blockAmount = 15;
 bool destroyWnd = false, ballMove = true;
+float xAngle = -2.0, yAngle = -2.0;
 
 struct block {
-	int x;
-	int y;
+	int xb;
+	int yb;
 	//int draw;
 } item;
 
@@ -60,7 +61,6 @@ int main(int argc, char *argv[])
 	glutInitWindowSize(WIDTH, HEIGHT);
 
 	glutCreateWindow("OpenGL");
-
 	glutDisplayFunc(display);
 	glutReshapeFunc(reshape);
 	glutPassiveMotionFunc(MouseMove);
@@ -105,65 +105,59 @@ void menu() {
 	}
 }
 
+void reboundDir() {
+	if (yPrevPlatePos < xLeftPlatePos && xAngle > 0 || yPrevPlatePos > xLeftPlatePos && xAngle < 0)
+		yAngle *= -1;
+	else if (yPrevPlatePos < xLeftPlatePos && xAngle < 0 || yPrevPlatePos > xLeftPlatePos && xAngle > 0) {
+		yAngle *= -1;
+		xAngle *= -1;
+	}
+	else {
+		yAngle *= -1;
+	}
+}
+
 void ballMotion()
 {
-	float angle = 2.0;
+	if (btnStart == GLUT_LEFT_BUTTON)
+		ballMove = true;
 	if (!ballMove) {
 		xBallPos = xLeftPlatePos + plateWidth / 2;
 		yBallPos = yPlatePos - 6;
 	}
 	else{
-		if (yBallPos == yPlatePos && xBallPos > xMousePos - 40 && xBallPos < xMousePos + 50)
-		{
-			stateY = 1;
-			angle = abs(xBallPos - xMousePos) / 5;
+		if (yBallPos == yPlatePos && xBallPos >= xLeftPlatePos && xBallPos <= xRightPlatePos + 10){
+			float angle = abs(xRightPlatePos - plateWidth / 2 - xBallPos) / 10 + 1;
+			if (xAngle < 0)
+				xAngle = -angle;
+			else
+				xAngle = angle;
+			reboundDir();
 		}
+		if (xBallPos <= 0 || xBallPos >= WIDTH)
+			xAngle *= -1;
+		
 		if (yBallPos <= 0)
-			stateY = -1;
-		if (xBallPos <= 0)
-			stateX = 1;
-		if (xBallPos >= WIDTH)
-			stateX = -1;
-		switch (stateX)
-		{
-		case -1:
-			xBallPos -= angle;
-			break;
-		case 1:
-			xBallPos += angle;
-			break;
+			yAngle *= -1;
+		if (yBallPos > yPlatePos + 15) {
+			ballMove = false;
+			btnStart = -1;
 		}
-		switch (stateY)
-		{
-		case -1:
-			yBallPos += 2;
-			break;
-		case 1:
-			yBallPos -= 2;
-			break;
-		}
+		xBallPos += xAngle;
+		yBallPos += yAngle;
 	}
-	
 }
 
 void collision()
 {
 	int deleteBlock = 0, index = -1;
 	for (int i = 0; i < blockAmount; i++){
-		if(yBallPos >= blocks[i].y && yBallPos <= blocks[i].y + 20)
-			if (xBallPos + 10 == blocks[i].x || xBallPos - 20 == blocks[i].x ) {
-				stateX *= -1;
-				deleteBlock = 1;
-				index = i;
-				break;
-			}
-		if(xBallPos >= blocks[i].x && xBallPos <= blocks[i].x + 20)
-			if (yBallPos + 10 == blocks[i].y || yBallPos - 20 == blocks[i].y) {
-				stateY *= -1;
-				deleteBlock = 1;
-				index = i;
-				break;
-			}
+		if (yBallPos + 10 >= blocks[i].yb && yBallPos + 10 <= blocks[i].yb + 20 && xBallPos >= blocks[i].xb && xBallPos <= blocks[i].xb + 20) {
+			deleteBlock = 1;
+			index = i;
+			reboundDir();
+		}
+
 		}
 	if (deleteBlock == 1) {
 		blocks.erase(blocks.begin() + index);
@@ -176,8 +170,8 @@ void initCoordinates()
 {
 	for (int i = 0; i < blockAmount; i++)
 	{
-		item.x = i * 25 + 10;
-		item.y = 200;
+		item.xb = i * 25 + 10;
+		item.yb = 200;
 		blocks.push_back(item);
 	}
 }
@@ -189,13 +183,14 @@ void ViewBlocks()
 	for (int i = 0; i < blockAmount; i++)
 	{
 		glBegin(GL_POINTS);
-		glVertex2f(blocks[i].x, blocks[i].y);
+		glVertex2f(blocks[i].xb, blocks[i].yb);
 		glEnd();
 	}
 
 }
 
 void platePosition() {
+	yPrevPlatePos = xLeftPlatePos;
 	if (xMousePos >= plateWidth / 2 && xMousePos <= WIDTH - plateWidth / 2) {
 		xLeftPlatePos = xMousePos - plateWidth / 2;
 		xRightPlatePos = xMousePos + plateWidth / 2;
@@ -238,10 +233,11 @@ void display()
 	glLoadIdentity();
 	menu();
 	if (btnPressed == 1) {
+		ShowCursor(false);
 		collision();
 		ViewBlocks();
 
-		glPointSize(10);
+		glPointSize(10); 
 		drawBall();
 		drawPlate();
 	}
