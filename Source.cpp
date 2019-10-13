@@ -14,11 +14,12 @@ using namespace std;
 #define MENUPROC 100
 #define GAMEPROC 101
 #define SUBMENUPROC 102
+#define SELECTLVLPROC 103
 #define EXIT 110
 
 using namespace std;
 
-Button playBtn, recordsBtn, exitBtn , nextLvlBtn, menuBtn, replayBtn;
+Button playBtn, recordsBtn, exitBtn , nextLvlBtn, menuBtn, replayBtn, lvlBtns[10];
 
 int x = -1, y = -1, btnWidth = 150, btnState,btnStart, btnPressed = -1, plateWidth = 80, xLeftPlatePos, xRightPlatePos;
 int xMousePos = 0, yPlatePos = 3 * HEIGHT / 4 + 5, xBallPos = 350, yBallPos = yPlatePos, yPrevPlatePos = 0, ballR = 7;
@@ -42,7 +43,7 @@ void MouseMove(int ax, int ay){
 void display();
 void timer(int);
 void reshape(int, int);
-void initBlocks();
+void initBlocks(char *lvlPath);
 
 void init(){
 	glClearColor(0.8, 0.7, 0.7, 1.0);
@@ -100,18 +101,22 @@ void printText(char *str) {
 char *loadLevel(char *path) {
 	FILE *file;
 	file = fopen(path, "r");
-
-	fseek(file, 0, SEEK_END);
-	int size = ftell(file);
-	int buffSize = WIDTH / blockWidth;
-	fseek(file, 0, SEEK_SET);
-	char *buff = (char*)calloc(buffSize, sizeof(char));
-	char *dest = (char*)calloc(size, sizeof(char));
-	while (fgets(buff, buffSize, file) != NULL) {
-		//fgets(buff, buffSize, file);
-		strcat(dest, buff);
+	if (file != NULL) {
+		fseek(file, 0, SEEK_END);
+		int size = ftell(file);
+		int buffSize = WIDTH / blockWidth;
+		fseek(file, 0, SEEK_SET);
+		char *buff = (char*)calloc(buffSize, sizeof(char));
+		char *dest = (char*)calloc(size, sizeof(char));
+		while (fgets(buff, buffSize, file) != NULL) {
+			//fgets(buff, buffSize, file);
+			strcat(dest, buff);
+		}
+		return dest;
 	}
-	return dest;
+	else
+		process = SELECTLVLPROC;
+	return NULL;
 }
 
 void initMenuButtons() {
@@ -152,12 +157,31 @@ void subMenu() {
 		btnStart = -1;
 	}
 	else if (nextLvlBtn.isClicked(x, y) && btnStart == GLUT_LEFT_BUTTON && btnState == GLUT_UP) {
-		initBlocks();
+		//initBlocks();
 		process = GAMEPROC;
 		btnStart = -1;
 		ballMove = false;
 		score = 0;
 	}
+}
+
+void initLvlMenu() {
+	int lvlBtnH = 60, lvlBtnW = 80, xSpacing = 0, ySpacing = 0, t = 0;
+	for (int i = 0; i < 10; i++) {
+		if ((i) % 2 == 0) {
+			ySpacing += 3 * lvlBtnH / 2;
+			xSpacing = 0;
+			t = 0;
+		}
+		xSpacing = t * (lvlBtnW + 10);
+		lvlBtns[i].setButtonPosition(xSpacing, ySpacing, lvlBtnW, lvlBtnH);
+		t++;
+	}
+}
+
+void addLvlMenu() {
+	for (int i = 0; i < 10; i++)
+		lvlBtns[i].CreateButton(i + 1);
 }
 
 void menu(){
@@ -166,10 +190,10 @@ void menu(){
 	if (process == MENUPROC){
 		showMenu();
 		if (playBtn.isClicked(x, y) && btnStart == GLUT_LEFT_BUTTON && btnState == GLUT_UP) {
-			process = GAMEPROC;
+			process = SELECTLVLPROC;
 			glClear(GL_COLOR_BUFFER_BIT);
 			btnStart = -1;
-			initBlocks();
+			initLvlMenu();
 			score = 0;
 		}
 		else if (exitBtn.isClicked(x, y) && btnStart == GLUT_LEFT_BUTTON && btnState == GLUT_UP)
@@ -224,28 +248,47 @@ void setBlockAmount(char *lvl) {
 	}
 }
 
-void initBlocks() {
-	char *lvlMap = loadLevel("lvl_11.txt");
-	int ySpacing = 0, t = 0, xSpasing = 0;
-	setBlockAmount(lvlMap);
-	if (blockAmount > 0)
-		ySpacing = 0;
-	for (int i = 0; i < strlen(lvlMap); i++){
-		if (lvlMap[i] == '\n') {
-			ySpacing += blockHeight + 5;
-			t = 0;
-			xSpasing = 0;
+void selectLvl() {
+	char lvlPath[10] = "lvl_", lvl[4] = "";
+	if (btnStart == GLUT_LEFT_BUTTON) {
+		for (int i = 0; i < 10; i++) {
+			if (lvlBtns[i].isClicked(x, y) && btnState == GLUT_UP) {
+				_itoa(i + 1, lvl, 10);
+				strcat(lvlPath, lvl);
+				strcat(lvlPath, ".txt");
+				process = GAMEPROC;
+				ballMove = false;
+				btnStart = -1;
+				initBlocks(lvlPath);
+			}
 		}
-		if(lvlMap[i] != '0' && lvlMap[i] != '\n') {
-			item.xb = xSpasing;
-			item.yb = ySpacing;
-			item.durability = lvlMap[i] - 48;
-			blocks.push_back(item);
-			t++;
-			xSpasing += blockWidth + 5;
+	}
+}
+
+void initBlocks(char *lvlPath) {
+	char *lvlMap = loadLevel(lvlPath);
+	if (lvlMap != NULL) {
+		int ySpacing = 0, t = 0, xSpasing = 0;
+		setBlockAmount(lvlMap);
+		if (blockAmount > 0)
+			ySpacing = 0;
+		for (int i = 0; i < strlen(lvlMap); i++) {
+			if (lvlMap[i] == '\n') {
+				ySpacing += blockHeight + 5;
+				t = 0;
+				xSpasing = 0;
+			}
+			if (lvlMap[i] != '0' && lvlMap[i] != '\n') {
+				item.xb = xSpasing;
+				item.yb = ySpacing;
+				item.durability = lvlMap[i] - 48;
+				blocks.push_back(item);
+				t++;
+				xSpasing += blockWidth + 5;
+			}
+			if (lvlMap[i] == '0')
+				xSpasing += blockWidth + 5;
 		}
-		if(lvlMap[i] == '0')
-			xSpasing += blockWidth + 5;
 	}
 }
 
@@ -279,6 +322,8 @@ void ViewBlocks(){
 		blockAmount = 0;
 	}
 }
+
+char *lvl;
 
 void platePosition() {
 	yPrevPlatePos = xLeftPlatePos;
@@ -371,6 +416,10 @@ void display(){
 	switch (process) {
 		case MENUPROC:
 			menu();
+			break;
+		case SELECTLVLPROC:
+			addLvlMenu();
+			selectLvl();
 			break;
 		case SUBMENUPROC:
 			subMenu();
