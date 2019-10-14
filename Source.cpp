@@ -15,18 +15,19 @@ using namespace std;
 #define GAMEPROC 101
 #define SUBMENUPROC 102
 #define SELECTLVLPROC 103
+#define INITPROC 104
 #define EXIT 110
 
 using namespace std;
 
 Button playBtn, recordsBtn, exitBtn , nextLvlBtn, menuBtn, replayBtn, lvlBtns[10];
 
-int x = -1, y = -1, btnWidth = 150, btnState,btnStart, btnPressed = -1, plateWidth = 80, xLeftPlatePos, xRightPlatePos;
+int x = -1, y = -1, btnWidth = 150, btnState,btnStart, btnPressed = -1, plateWidth = 80, xLeftPlatePos, xRightPlatePos, lifes = 3;
 int xMousePos = 0, yPlatePos = 3 * HEIGHT / 4 + 5, xBallPos = 350, yBallPos = yPlatePos, yPrevPlatePos = 0, ballR = 7;
 int blockAmount = 0, score = 0;
 bool destroyWnd = false, ballMove = false;
-float xAngle = -2.0, yAngle = -1.0;
-int blockHeight = 120, blockWidth = 150, process = 100;
+float xAngle = 2.0, yAngle = 1.0;
+int blockHeight = 20, blockWidth = 50, process = INITPROC, lvlsPassed, lvls;
 //50 20
 struct block {
 	int xb;
@@ -44,6 +45,9 @@ void display();
 void timer(int);
 void reshape(int, int);
 void initBlocks(char *lvlPath);
+void setLvlsInfo();
+int readFile(char *path);
+void saveProgress();
 
 void init(){
 	glClearColor(0.8, 0.7, 0.7, 1.0);
@@ -64,6 +68,7 @@ int main(int argc, char *argv[]){
 	glutInitWindowPosition(50, 50);
 	glutInitWindowSize(WIDTH, HEIGHT);
 	glutCreateWindow("OpenGL");
+	glutSetCursor(GLUT_CURSOR_LEFT_ARROW);
 	glutDisplayFunc(display);
 	glutReshapeFunc(reshape);
 	glutPassiveMotionFunc(MouseMove);
@@ -71,6 +76,7 @@ int main(int argc, char *argv[]){
 	glutTimerFunc(0, timer, 0);
 	init();
 	glutMainLoop();
+	saveProgress();
 }
 
 void timer(int){
@@ -86,11 +92,11 @@ void renderBM(float x, float y, void *font, char *str){
 	}
 }
 
-void printText(int score){
+void printText(int xPos, int yPos, int info){
 	glColor3f(1.0, 1.0, 1.0);
 	char str[15];
-	_itoa(score, str, 10);
-	renderBM(WIDTH/2, yPlatePos + 100, GLUT_BITMAP_TIMES_ROMAN_24, str);
+	_itoa(info, str, 10);
+	renderBM(xPos, yPos, GLUT_BITMAP_TIMES_ROMAN_24, str);
 }
 
 void printText(char *str) {
@@ -98,7 +104,39 @@ void printText(char *str) {
 	renderBM(WIDTH / 2 - 80, HEIGHT / 2, GLUT_BITMAP_TIMES_ROMAN_24, str);
 }
 
-char *loadLevel(char *path) {
+void setLvlsInfo() {//Считывание кол-ва пройденных уровней и общего кол-ва уровней
+	lvlsPassed = readFile("progress.txt");
+	lvls = readFile("lvlsAmount.txt");
+	cout << "Completed";
+}
+
+bool isLvlOpen(int lvl) {
+	if (lvl <= lvlsPassed)
+		return true;
+	return false;
+}
+
+void saveProgress() {
+	FILE *file = fopen("progress.txt", "w+");
+	if (file != NULL) {
+		fprintf(file, "%d", lvlsPassed);
+		fclose(file);
+	}
+}
+
+int readFile(char *path) {
+	int output = -1;
+	FILE *file = fopen(path, "r");
+	if (file != NULL) {
+		while (fscanf(file, "%d", &output)) {
+			fclose(file);
+			return output;
+		}
+	}
+	return output;
+}
+
+char *loadLvl(char *path) {
 	FILE *file;
 	file = fopen(path, "r");
 	if (file != NULL) {
@@ -109,9 +147,9 @@ char *loadLevel(char *path) {
 		char *buff = (char*)calloc(buffSize, sizeof(char));
 		char *dest = (char*)calloc(size, sizeof(char));
 		while (fgets(buff, buffSize, file) != NULL) {
-			//fgets(buff, buffSize, file);
 			strcat(dest, buff);
 		}
+		fclose(file);
 		return dest;
 	}
 	else
@@ -148,8 +186,7 @@ void addSubMenuButtons() {
 
 void subMenu() {
 	char *lvlPath;
-	ShowCursor(true);
-	glClear(GL_COLOR_BUFFER_BIT);
+	glutSetCursor(GLUT_CURSOR_LEFT_ARROW);
 	initSubMenuButtons();
 	addSubMenuButtons();
 	if (menuBtn.isClicked(x, y) && btnStart == GLUT_LEFT_BUTTON && btnState == GLUT_UP) {
@@ -157,7 +194,6 @@ void subMenu() {
 		btnStart = -1;
 	}
 	else if (nextLvlBtn.isClicked(x, y) && btnStart == GLUT_LEFT_BUTTON && btnState == GLUT_UP) {
-		//initBlocks();
 		process = GAMEPROC;
 		btnStart = -1;
 		ballMove = false;
@@ -185,20 +221,23 @@ void addLvlMenu() {
 }
 
 void menu(){
-	char *lvlPath = NULL;
-	ShowCursor(true);
-	if (process == MENUPROC){
-		showMenu();
-		if (playBtn.isClicked(x, y) && btnStart == GLUT_LEFT_BUTTON && btnState == GLUT_UP) {
-			process = SELECTLVLPROC;
-			glClear(GL_COLOR_BUFFER_BIT);
-			btnStart = -1;
-			initLvlMenu();
-			score = 0;
-		}
-		else if (exitBtn.isClicked(x, y) && btnStart == GLUT_LEFT_BUTTON && btnState == GLUT_UP)
-			process = EXIT;
+	showMenu();
+	if (playBtn.isClicked(x, y) && btnStart == GLUT_LEFT_BUTTON && btnState == GLUT_UP) {
+		process = SELECTLVLPROC;
+		btnStart = -1;
+		score = 0;
 	}
+	else if (exitBtn.isClicked(x, y) && btnStart == GLUT_LEFT_BUTTON && btnState == GLUT_UP)
+		process = EXIT;
+	
+}
+
+void initFunctions() {
+	initLvlMenu();
+	initMenuButtons();
+	setLvlsInfo();
+	initSubMenuButtons();
+	process = MENUPROC;
 }
 
 bool levelPassed() {
@@ -254,19 +293,24 @@ void selectLvl() {
 		for (int i = 0; i < 10; i++) {
 			if (lvlBtns[i].isClicked(x, y) && btnState == GLUT_UP) {
 				_itoa(i + 1, lvl, 10);
-				strcat(lvlPath, lvl);
-				strcat(lvlPath, ".txt");
-				process = GAMEPROC;
-				ballMove = false;
-				btnStart = -1;
-				initBlocks(lvlPath);
+				if (isLvlOpen(i+1)) {
+					strcat(lvlPath, lvl);
+					strcat(lvlPath, ".txt");
+					process = GAMEPROC;
+					ballMove = false;
+					btnStart = -1;
+					lifes = 3;
+					initBlocks(lvlPath);
+					glutSetCursor(GLUT_CURSOR_NONE);
+				}
+				else process = SELECTLVLPROC;
 			}
 		}
 	}
 }
 
 void initBlocks(char *lvlPath) {
-	char *lvlMap = loadLevel(lvlPath);
+	char *lvlMap = loadLvl(lvlPath);
 	if (lvlMap != NULL) {
 		int ySpacing = 0, t = 0, xSpasing = 0;
 		setBlockAmount(lvlMap);
@@ -303,6 +347,16 @@ void switchColor(int color) {
 		glColor3f(0.3, 0.0, 0.0);
 }
 
+void lvlPassed() {
+	process = SUBMENUPROC;
+	ballMove = false;
+	blocks.clear();
+	blockAmount = 0;
+	lvlsPassed++;
+	yAngle = 1.0;
+	saveProgress();
+}
+
 void ViewBlocks(){
 	for (int i = 0; i < blockAmount; i++){
 		switchColor(blocks[i].durability);
@@ -314,16 +368,9 @@ void ViewBlocks(){
 		glEnd();
 	}
 	if (blockAmount == 0) {
-		glClear(GL_COLOR_BUFFER_BIT);
-		process = SUBMENUPROC;
-		ShowCursor(true);
-		ballMove = false;
-		blocks.clear();
-		blockAmount = 0;
+		lvlPassed();
 	}
 }
-
-char *lvl;
 
 void platePosition() {
 	yPrevPlatePos = xLeftPlatePos;
@@ -363,10 +410,10 @@ void ballMotion(){
 	}
 	if (ballMove == false) {
 		xBallPos = xLeftPlatePos + plateWidth / 2;
-		yBallPos = yPlatePos - 5;
+		yBallPos = yPlatePos - ballR;
 	}
 	else{
-		if (yBallPos == yPlatePos && xBallPos >= xLeftPlatePos && xBallPos <= xRightPlatePos + 10) {
+		if (yBallPos + ballR == yPlatePos && xBallPos >= xLeftPlatePos && xBallPos <= xRightPlatePos + ballR) {
 			float angle = abs(xRightPlatePos - plateWidth / 2 - xBallPos) / 10 + 1;
 			if (xAngle < 0)
 				xAngle = -angle;
@@ -379,9 +426,12 @@ void ballMotion(){
 
 		if (yBallPos <= 0)
 			yAngle *= -1;
-		if (yBallPos > yPlatePos + 15) {
+		if (yBallPos > yPlatePos + 40) {
 			ballMove = false;
 			btnStart = -1;
+			lifes--;
+			if (lifes == 0)
+				process = SUBMENUPROC;
 		}
 		xBallPos += xAngle;
 		yBallPos += yAngle;
@@ -402,8 +452,8 @@ void drawBall(){
 }
 
 void game() {
-	ShowCursor(false);
-	printText(score);
+	printText(WIDTH / 2, HEIGHT - 60,score);
+	printText(WIDTH / 2, HEIGHT - 30, lifes);
 	collision();
 	ViewBlocks();
 	drawPlate();
@@ -411,6 +461,7 @@ void game() {
 }
 
 void display(){
+	ShowCursor(true);
 	glClear(GL_COLOR_BUFFER_BIT);
 	glLoadIdentity();
 	switch (process) {
@@ -424,8 +475,11 @@ void display(){
 		case SUBMENUPROC:
 			subMenu();
 			break;
+		case INITPROC:
+			initFunctions();
+			break;
 		case GAMEPROC:
-			glClear(GL_COLOR_BUFFER_BIT);
+			ShowCursor(false);
 			game();
 			break;
 		case EXIT:
