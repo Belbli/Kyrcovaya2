@@ -4,10 +4,11 @@
 #include<math.h>
 #include<vector>
 #include<iostream>
+#include<ctime>
 using namespace std;
 
-#define WIDTH 480
-#define HEIGHT 600
+//#define width 480
+//#define height 600
 #define PLAYBTN 1
 #define RECORDSBTN 2
 #define EXITBTN 0
@@ -21,21 +22,38 @@ using namespace std;
 using namespace std;
 
 Button playBtn, recordsBtn, exitBtn , nextLvlBtn, menuBtn, replayBtn, lvlBtns[10];
-
-int x = -1, y = -1, btnWidth = 150, btnState,btnStart, btnPressed = -1, plateWidth = 80, xLeftPlatePos, xRightPlatePos, lifes = 3;
-int xMousePos = 0, yPlatePos = 3 * HEIGHT / 4 + 5, xBallPos = 350, yBallPos = yPlatePos, yPrevPlatePos = 0, ballR = 7;
+int width = 480, height = 600;
+int x = -1, y = -1, btnWidth = 150, btnState,btnStart, btnPressed = -1, plateWidth = width/5, xLeftPlatePos, xRightPlatePos, lifes = 3;
+int xMousePos = 0, yPlatePos = 3 * height / 4 + 5, yPrevPlatePos = 0;
 int blockAmount = 0, score = 0;
-bool destroyWnd = false, ballMove = false;
+bool destroyWnd = false, nextLvl = false;
 float xAngle = 2.0, yAngle = 1.0;
-int blockHeight = 20, blockWidth = 50, process = INITPROC, lvlsPassed, lvls;
+int blockHeight = 20, blockWidth = 50, process = INITPROC, lvlsPassed, lvls, bonusAmount = 0, ballsAmount = 0;
 //50 20
+
+struct Ball {
+	int radius = 7;
+	int x;
+	int y;
+	bool move;
+}ball;
+
+struct Bonus {
+	int x;
+	int y;
+	int bonusType;
+	bool move;
+}bonus;
+
 struct block {
 	int xb;
 	int yb;
-	int durability;
+	int durability; 
 } item;
 
 vector<block> blocks;
+vector<Bonus> bonuses;
+vector<Ball> balls;
 
 void MouseMove(int ax, int ay){
 	xMousePos = ax;
@@ -51,7 +69,10 @@ void saveProgress();
 
 void init(){
 	glClearColor(0.8, 0.7, 0.7, 1.0);
-	glOrtho(-360, 360, -360, 360, -100, 100);
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+	glOrtho(0, width, height, 0, 0, 1);
+	glMatrixMode(GL_MODELVIEW);
 }
 
 void MouseMoveClick(int btn, int state, int ax, int ay){
@@ -62,11 +83,12 @@ void MouseMoveClick(int btn, int state, int ax, int ay){
 }
 
 int main(int argc, char *argv[]){
+	srand(time(NULL));
 	glutInit(&argc, argv);
 	glutInitDisplayMode(GLUT_RGB | GLUT_DOUBLE);
 
 	glutInitWindowPosition(50, 50);
-	glutInitWindowSize(WIDTH, HEIGHT);
+	glutInitWindowSize(width, height);
 	glutCreateWindow("OpenGL");
 	glutSetCursor(GLUT_CURSOR_LEFT_ARROW);
 	glutDisplayFunc(display);
@@ -76,12 +98,13 @@ int main(int argc, char *argv[]){
 	glutTimerFunc(0, timer, 0);
 	init();
 	glutMainLoop();
-	saveProgress();
+	return 0;
 }
 
 void timer(int){
 	glutPostRedisplay();
 	glutTimerFunc(1000 / 100, timer, 0);
+	display();
 }
 
 void renderBM(float x, float y, void *font, char *str){
@@ -101,7 +124,7 @@ void printText(int xPos, int yPos, int info){
 
 void printText(char *str) {
 	glColor3f(1.0, 1.0, 1.0);
-	renderBM(WIDTH / 2 - 80, HEIGHT / 2, GLUT_BITMAP_TIMES_ROMAN_24, str);
+	renderBM(width / 2 - 80, height / 2, GLUT_BITMAP_TIMES_ROMAN_24, str);
 }
 
 void setLvlsInfo() {//Считывание кол-ва пройденных уровней и общего кол-ва уровней
@@ -142,7 +165,7 @@ char *loadLvl(char *path) {
 	if (file != NULL) {
 		fseek(file, 0, SEEK_END);
 		int size = ftell(file);
-		int buffSize = WIDTH / blockWidth;
+		int buffSize = width / blockWidth;
 		fseek(file, 0, SEEK_SET);
 		char *buff = (char*)calloc(buffSize, sizeof(char));
 		char *dest = (char*)calloc(size, sizeof(char));
@@ -161,9 +184,9 @@ void initMenuButtons() {
 	int btnHeight = 40;
 	int lineSpace = btnHeight + 30;
 
-	playBtn.setButtonPosition(WIDTH / 2 - btnWidth / 2, HEIGHT / 4, btnWidth, btnHeight);
-	recordsBtn.setButtonPosition(WIDTH / 2 - btnWidth / 2, HEIGHT / 4 + lineSpace, btnWidth, btnHeight);
-	exitBtn.setButtonPosition(WIDTH / 2 - btnWidth / 2, HEIGHT / 4 + 2 * lineSpace, btnWidth, btnHeight);
+	playBtn.setButtonPosition(width / 2 - btnWidth / 2, height / 4, btnWidth, btnHeight);
+	recordsBtn.setButtonPosition(width / 2 - btnWidth / 2, height / 4 + lineSpace, btnWidth, btnHeight);
+	exitBtn.setButtonPosition(width / 2 - btnWidth / 2, height / 4 + 2 * lineSpace, btnWidth, btnHeight);
 }
 
 void showMenu(){
@@ -175,8 +198,8 @@ void showMenu(){
 
 void initSubMenuButtons() {
 	int subMenuBtnH = 40, subMenuBtnW = 80;
-	menuBtn.setButtonPosition(WIDTH / 2 - subMenuBtnW / 2, HEIGHT / 2, subMenuBtnW, subMenuBtnH);
-	nextLvlBtn.setButtonPosition(WIDTH / 2 + subMenuBtnW, HEIGHT / 2, subMenuBtnW, subMenuBtnH);
+	menuBtn.setButtonPosition(width / 2 - subMenuBtnW / 2, height / 2, subMenuBtnW, subMenuBtnH);
+	nextLvlBtn.setButtonPosition(width / 2 + subMenuBtnW, height / 2, subMenuBtnW, subMenuBtnH);
 }
 
 void addSubMenuButtons() {
@@ -196,20 +219,19 @@ void subMenu() {
 	else if (nextLvlBtn.isClicked(x, y) && btnStart == GLUT_LEFT_BUTTON && btnState == GLUT_UP) {
 		process = GAMEPROC;
 		btnStart = -1;
-		ballMove = false;
 		score = 0;
 	}
 }
 
 void initLvlMenu() {
-	int lvlBtnH = 60, lvlBtnW = 80, xSpacing = 0, ySpacing = 0, t = 0;
+	int lvlBtnH = 60, lvlBtnW = 80, xSpacing = 100, ySpacing = 0, t = 0;
 	for (int i = 0; i < 10; i++) {
 		if ((i) % 2 == 0) {
 			ySpacing += 3 * lvlBtnH / 2;
 			xSpacing = 0;
 			t = 0;
 		}
-		xSpacing = t * (lvlBtnW + 10);
+		xSpacing += t * (lvlBtnW + 10);
 		lvlBtns[i].setButtonPosition(xSpacing, ySpacing, lvlBtnW, lvlBtnH);
 		t++;
 	}
@@ -258,24 +280,60 @@ void reboundDir(){
 }
 
 bool verticalRebound(int blockIndex) {
-	if (yBallPos + ballR == blocks[blockIndex].yb && xBallPos >= blocks[blockIndex].xb && xBallPos <= blocks[blockIndex].xb + blockWidth || yBallPos - ballR == blocks[blockIndex].yb + blockHeight && xBallPos >= blocks[blockIndex].xb && xBallPos <= blocks[blockIndex].xb + blockWidth){
-		yAngle *= -1;
-		return true;
+	for (int i = 0; i < ballsAmount; i++) {
+		if (balls[i].y + balls[i].radius == blocks[blockIndex].yb && balls[i].x >= blocks[blockIndex].xb && balls[i].x <= blocks[blockIndex].xb + blockWidth || balls[i].y - balls[i].radius == blocks[blockIndex].yb + blockHeight && balls[i].x >= blocks[blockIndex].xb && balls[i].x <= blocks[blockIndex].xb + blockWidth) {
+			yAngle *= -1;
+			return true;
+		}
+	}
+	return false;
+}
+
+bool hasBonus(int blockNum, int &index) {
+	for (int i = 0; i < bonusAmount; i++) {
+		if (blocks[blockNum].xb == bonuses[i].x && blocks[blockNum].yb == bonuses[i].y) {
+			index = i;
+			return true;
+		}
 	}
 	return false;
 }
 
 void collision(){
-	for (int i = 0; i < blockAmount; i++){
-		if (yBallPos + ballR >= blocks[i].yb && yBallPos - ballR <= blocks[i].yb + blockHeight && xBallPos + ballR >= blocks[i].xb && xBallPos - ballR <= blocks[i].xb + blockWidth) {
-			if (!verticalRebound(i))
-				xAngle *= -1;
-			blocks[i].durability--;
-			score += 20;
+	int index;
+	for (int i = 0; i < ballsAmount; i++) {
+		for (int j = 0; j < blockAmount; j++) {
+			if (balls[i].y + balls[i].radius >= blocks[j].yb && balls[i].y - balls[i].radius <= blocks[j].yb + blockHeight && balls[i].x + balls[i].radius >= blocks[j].xb && balls[i].x - balls[i].radius <= blocks[j].xb + blockWidth) {
+				if (!verticalRebound(j))
+					xAngle *= -1;
+				blocks[j].durability--;
+				score += 20;
+			}
+			if (blocks[j].durability == 0) {
+				if (hasBonus(j, index))
+					bonuses[index].move = true;
+				blocks.erase(blocks.begin() + j);
+				blockAmount--;
+			}
 		}
-		if (blocks[i].durability == 0) {
-			blocks.erase(blocks.begin() + i);
-			blockAmount--;
+	}
+}
+
+void setBonus(int blockNumber) {
+	bonus.bonusType = rand() % 4;
+	bonus.x = blocks[blockNumber].xb;
+	bonus.y = blocks[blockNumber].yb;
+	bonus.move = false;
+	bonusAmount++;
+}
+
+void initBonuses() {
+	int num;
+	for (int i = 0; i < blockAmount; i++) {
+		num = rand() % 7;
+		if (num % 6 == 0) {
+			setBonus(i);
+			bonuses.push_back(bonus);
 		}
 	}
 }
@@ -287,6 +345,14 @@ void setBlockAmount(char *lvl) {
 	}
 }
 
+void addBall() {
+	ball.x = xLeftPlatePos + plateWidth / 2;
+	ball.y = yPlatePos - ball.radius;
+	ball.move = false;
+	balls.push_back(ball);
+	ballsAmount++;
+}
+
 void selectLvl() {
 	char lvlPath[10] = "lvl_", lvl[4] = "";
 	if (btnStart == GLUT_LEFT_BUTTON) {
@@ -294,13 +360,16 @@ void selectLvl() {
 			if (lvlBtns[i].isClicked(x, y) && btnState == GLUT_UP) {
 				_itoa(i + 1, lvl, 10);
 				if (isLvlOpen(i+1)) {
+					if (lvlsPassed = i + 1)
+						nextLvl = true;
 					strcat(lvlPath, lvl);
 					strcat(lvlPath, ".txt");
 					process = GAMEPROC;
-					ballMove = false;
 					btnStart = -1;
 					lifes = 3;
 					initBlocks(lvlPath);
+					initBonuses();
+					addBall();
 					glutSetCursor(GLUT_CURSOR_NONE);
 				}
 				else process = SELECTLVLPROC;
@@ -312,7 +381,7 @@ void selectLvl() {
 void initBlocks(char *lvlPath) {
 	char *lvlMap = loadLvl(lvlPath);
 	if (lvlMap != NULL) {
-		int ySpacing = 0, t = 0, xSpasing = 0;
+		int ySpacing = 0, t = 0, xSpasing = 0, k=0;
 		setBlockAmount(lvlMap);
 		if (blockAmount > 0)
 			ySpacing = 0;
@@ -349,12 +418,17 @@ void switchColor(int color) {
 
 void lvlPassed() {
 	process = SUBMENUPROC;
-	ballMove = false;
+	balls.clear();
+	ballsAmount = 0;
 	blocks.clear();
 	blockAmount = 0;
-	lvlsPassed++;
+	if(nextLvl)
+		lvlsPassed++;
+	nextLvl = false;
 	yAngle = 1.0;
 	saveProgress();
+	bonuses.clear();
+	bonusAmount = 0;
 }
 
 void ViewBlocks(){
@@ -374,7 +448,7 @@ void ViewBlocks(){
 
 void platePosition() {
 	yPrevPlatePos = xLeftPlatePos;
-	if (xMousePos >= plateWidth / 2 && xMousePos <= WIDTH - plateWidth / 2) {
+	if (xMousePos >= plateWidth / 2 && xMousePos <= width - plateWidth / 2) {
 		xLeftPlatePos = xMousePos - plateWidth / 2;
 		xRightPlatePos = xMousePos + plateWidth / 2;
 	}
@@ -383,58 +457,51 @@ void platePosition() {
 		xRightPlatePos = plateWidth;
 	}
 	else {
-		xLeftPlatePos = WIDTH - plateWidth;
-		xRightPlatePos = WIDTH;
+		xLeftPlatePos = width - plateWidth;
+		xRightPlatePos = width;
 	}
 }
 
 void drawPlate() {
-	glBegin(GL_POLYGON);
-
 	glColor3f(1.0, 0.0, 0.0);
-	
 	platePosition();
-
-	glVertex2f(xLeftPlatePos, 20.0 + yPlatePos);
-	glVertex2f(xLeftPlatePos, 0.0 + yPlatePos);
-	glVertex2f(xRightPlatePos, 0.0 + yPlatePos);
-	glVertex2f(xRightPlatePos, 20.0 + yPlatePos);
-
-	glEnd();
+	glRectf(xLeftPlatePos, yPlatePos, xRightPlatePos, yPlatePos + 20.0);
 }
 
 void ballMotion(){
 	if (btnStart == GLUT_LEFT_BUTTON) {
-		ballMove = true;
+		balls[0].move = true;
 		btnStart = -1;
 	}
-	if (ballMove == false) {
-		xBallPos = xLeftPlatePos + plateWidth / 2;
-		yBallPos = yPlatePos - ballR;
+	for (int i = 0; i < ballsAmount; i++){
+	if (balls[i].move == false) {
+		balls[i].x = xLeftPlatePos + plateWidth / 2;
+		balls[i].y = yPlatePos - balls[i].radius;
 	}
 	else{
-		if (yBallPos + ballR == yPlatePos && xBallPos >= xLeftPlatePos && xBallPos <= xRightPlatePos + ballR) {
-			float angle = abs(xRightPlatePos - plateWidth / 2 - xBallPos) / 10 + 1;
-			if (xAngle < 0)
-				xAngle = -angle;
-			else
-				xAngle = angle;
-			reboundDir();
-		}
-		if (xBallPos <= 0 || xBallPos >= WIDTH)
-			xAngle *= -1;
+			if (balls[i].y + balls[i].radius == yPlatePos && balls[i].x >= xLeftPlatePos && balls[i].x <= xRightPlatePos + balls[i].radius) {
+				float angle = abs(xRightPlatePos - plateWidth / 2 - balls[i].x) / 10 + 1;
+				if (xAngle < 0)
+					xAngle = -angle;
+				else
+					xAngle = angle;
+				reboundDir();
+			}
+			if (balls[i].x <= 0 || balls[i].x >= width)
+				xAngle *= -1;
 
-		if (yBallPos <= 0)
-			yAngle *= -1;
-		if (yBallPos > yPlatePos + 40) {
-			ballMove = false;
-			btnStart = -1;
-			lifes--;
-			if (lifes == 0)
-				process = SUBMENUPROC;
+			if (balls[i].y <= 0)
+				yAngle *= -1;
+			if (balls[i].y > yPlatePos + 40) {
+				balls[i].move = false;
+				btnStart = -1;
+				lifes--;
+				if (lifes == 0)
+					process = SUBMENUPROC;
+			}
+			balls[i].x += xAngle;
+			balls[i].y += yAngle;
 		}
-		xBallPos += xAngle;
-		yBallPos += yAngle;
 	}
 }
 
@@ -442,22 +509,52 @@ void drawBall(){
 	ballMotion();
 	glColor3f(0.0, 1.0, 0.0);
 	glBegin(GL_TRIANGLE_FAN);
-	for (int i = 0; i <= 50; i++) {
-		float angle = 2.0 * 3.1415926 * float(i) / float(50);
-		float dx = ballR * cosf(angle);
-		float dy = ballR * sinf(angle);
-		glVertex2f(xBallPos + dx, yBallPos + dy);
+	for (int i = 0; i < ballsAmount; i++){
+		for (int j = 0; j <= 50; j++) {
+			float angle = 2.0 * 3.1415926 * float(j) / float(50);
+			float dx = balls[i].radius * cosf(angle);
+			float dy = balls[i].radius * sinf(angle);
+			glVertex2f(balls[i].x + dx, balls[i].y + dy);
+		}
 	}
 	glEnd();
 }
 
+void drawBonus(int bonusIndex) {
+	if (bonuses[bonusIndex].y < yPlatePos + 10) {
+		glColor3f(0.0, 1.0, 0.0);
+		glPointSize(20);
+		glBegin(GL_POINTS);
+		glVertex2f(bonuses[bonusIndex].x, bonuses[bonusIndex].y);
+		glEnd();
+		bonuses[bonusIndex].y++;
+	}
+	else {
+		bonuses.erase(bonuses.begin() + bonusIndex);
+		bonusAmount--;
+	}
+}
+
+void activeBonuses() {
+	for (int i = 0; i < bonusAmount; i++) {
+		if (bonuses[i].move == true)
+			drawBonus(i);
+	}
+}
+
+void printGameInfo() {
+	printText(width / 2, height - 60, score);
+	printText(width / 2, height - 30, lifes);
+}
+
 void game() {
-	printText(WIDTH / 2, HEIGHT - 60,score);
-	printText(WIDTH / 2, HEIGHT - 30, lifes);
+	printGameInfo();
 	collision();
+	drawBall();
+	activeBonuses();
 	ViewBlocks();
 	drawPlate();
-	drawBall();
+	
 }
 
 void display(){
@@ -491,8 +588,21 @@ void display(){
 }
 
 void reshape(int w, int h){
+	int wh = w / h;
+
+	width = w;
+	height = h;
+
+	glViewport(0, 0, w, h);
 	glMatrixMode(GL_PROJECTION);
 	glLoadIdentity();
-	gluOrtho2D(0, WIDTH, HEIGHT,0);
+	//if (w <= h)
+	//	gluOrtho2D(0, width, height * wh, 0);
+	//else 
+	//	gluOrtho2D(0, width * wh, height, 0);
+	//gluPerspective(360, wh, 1, 10);
+	gluOrtho2D(0, width, height, 0);
 	glMatrixMode(GL_MODELVIEW);
+	plateWidth = width / 4;
+	yPlatePos = 2 * height / 3;
 }
