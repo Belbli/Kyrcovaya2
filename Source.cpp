@@ -320,7 +320,7 @@ void collision(){
 }
 
 void setBonus(int blockNumber) {
-	bonus.bonusType = rand() % 4;
+	bonus.bonusType = rand() % 3;
 	bonus.x = blocks[blockNumber].xb;
 	bonus.y = blocks[blockNumber].yb;
 	bonus.move = false;
@@ -468,6 +468,41 @@ void drawPlate() {
 	glRectf(xLeftPlatePos, yPlatePos, xRightPlatePos, yPlatePos + 20.0);
 }
 
+bool plateCollision(int x, int y, int r) {
+	if (y + r == yPlatePos && x >= xLeftPlatePos && x <= xRightPlatePos + r)
+		return true;
+	return false;
+}
+
+void plateRebound() {
+	float angle = abs(xMousePos - balls[0].x) / (plateWidth / 6);
+	if (angle == 0)
+		angle = 1;
+	if (xAngle < 0)
+		xAngle = -angle;
+	else
+		xAngle = angle;
+	reboundDir();
+}
+
+void wallsRebound(int x, int y, int r) {
+	if (x - r <= 0 || x + r >= width)
+		xAngle *= -1;
+	if (y + r <= 0)
+		yAngle *= -1;
+}
+
+bool ballLose(int x, int y) {
+	if (y > yPlatePos + 40) {
+		btnStart = -1;
+		lifes--;
+		return true;
+		if (lifes == 0)
+			process = SUBMENUPROC;
+	}
+	return false;
+}
+
 void ballMotion(){
 	if (btnStart == GLUT_LEFT_BUTTON) {
 		balls[0].move = true;
@@ -479,28 +514,14 @@ void ballMotion(){
 		balls[i].y = yPlatePos - balls[i].radius;
 	}
 	else{
-			if (balls[i].y + balls[i].radius == yPlatePos && balls[i].x >= xLeftPlatePos && balls[i].x <= xRightPlatePos + balls[i].radius) {
-				float angle = abs(xRightPlatePos - plateWidth / 2 - balls[i].x) / 10 + 1;
-				if (xAngle < 0)
-					xAngle = -angle;
-				else
-					xAngle = angle;
-				reboundDir();
-			}
-			if (balls[i].x <= 0 || balls[i].x >= width)
-				xAngle *= -1;
-
-			if (balls[i].y <= 0)
-				yAngle *= -1;
-			if (balls[i].y > yPlatePos + 40) {
-				balls[i].move = false;
-				btnStart = -1;
-				lifes--;
-				if (lifes == 0)
-					process = SUBMENUPROC;
-			}
-			balls[i].x += xAngle;
-			balls[i].y += yAngle;
+		if(plateCollision(balls[i].x, balls[i].y, balls[i].radius))
+			plateRebound();
+		wallsRebound(balls[i].x, balls[i].y, balls[i].radius);
+		
+		if (ballLose(balls[i].x, balls[i].y))
+			balls[i].move = false;
+		balls[i].x += xAngle;
+		balls[i].y += yAngle;
 		}
 	}
 }
@@ -520,6 +541,15 @@ void drawBall(){
 	glEnd();
 }
 
+void applyBonus(int bonusType) {
+	if (bonusType == 0)
+		plateWidth += plateWidth / 10;
+	if (bonusType == 1)
+		addBall();
+	if (bonusType == 2)
+		lifes++;
+}
+
 void drawBonus(int bonusIndex) {
 	if (bonuses[bonusIndex].y < yPlatePos + 10) {
 		glColor3f(0.0, 1.0, 0.0);
@@ -528,6 +558,8 @@ void drawBonus(int bonusIndex) {
 		glVertex2f(bonuses[bonusIndex].x, bonuses[bonusIndex].y);
 		glEnd();
 		bonuses[bonusIndex].y++;
+		//if(plateCollision(bonuses[bonusIndex].x, bonuses[bonusIndex].y, 0))
+		//	applyBonus(bonuses[bonusIndex].bonusType);
 	}
 	else {
 		bonuses.erase(bonuses.begin() + bonusIndex);
