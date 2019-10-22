@@ -5,6 +5,8 @@
 #include<vector>
 #include<iostream>
 #include<ctime>
+#include<glaux.h>
+#pragma comment( lib, "GLAUX.LIB" )
 using namespace std;
 
 //#define width 480
@@ -16,19 +18,23 @@ using namespace std;
 #define GAMEPROC 101
 #define SUBMENUPROC 102
 #define SELECTLVLPROC 103
-#define INITPROC 104
+#define TRAINMODE 104
+#define INITPROC 105 
+#define SELECTMODEPROC 106
+#define NORMALMODE 107
+#define SHOWRECORDS 108
 #define EXIT 110
 
 using namespace std;
 
-Button playBtn, recordsBtn, exitBtn , nextLvlBtn, menuBtn, replayBtn, lvlBtns[10];
+Button playBtn, recordsBtn, exitBtn , nextLvlBtn, menuBtn, replayBtn, lvlBtns[10], gameModeButtons[2];
 int width = 480, height = 600;
 int x = -1, y = -1, btnWidth = 150, btnState,btnStart, btnPressed = -1, plateWidth = width/5, xLeftPlatePos, xRightPlatePos, lifes = 3;
 int xMousePos = 0, yPlatePos = 3 * height / 4 + 5, yPrevPlatePos = 0;
-int blockAmount = 0, score = 0;
+int blockAmount = 0, score = 0, mode, recordsRows = 0;
 bool destroyWnd = false, nextLvl = false;
 float xAngle = 2.0, yAngle = 1.0;
-int blockHeight = 20, blockWidth = 50, process = INITPROC, lvlsPassed, lvls, bonusAmount = 0, ballsAmount = 0;
+int blockHeight = 20, blockWidth = 50, process = INITPROC, lvlsPassed, lvls, bonusAmount = 0, ballsAmount = 0, normalModeLvlPassed = 0;
 //50 20
 
 struct Ball {
@@ -51,9 +57,16 @@ struct block {
 	int durability; 
 } item;
 
+struct Record {
+	int priority;
+	char name[20];
+	int score;
+}record;
+
 vector<block> blocks;
 vector<Bonus> bonuses;
 vector<Ball> balls;
+vector<Record> records;
 
 void MouseMove(int ax, int ay){
 	xMousePos = ax;
@@ -66,7 +79,7 @@ void initBlocks(char *lvlPath);
 void setLvlsInfo();
 int readFile(char *path);
 void saveProgress();
-
+void keyBoardFunc(unsigned char key, int x, int y);
 void init(){
 	glClearColor(0.8, 0.7, 0.7, 1.0);
 	glMatrixMode(GL_PROJECTION);
@@ -86,7 +99,6 @@ int main(int argc, char *argv[]){
 	srand(time(NULL));
 	glutInit(&argc, argv);
 	glutInitDisplayMode(GLUT_RGB | GLUT_DOUBLE);
-
 	glutInitWindowPosition(50, 50);
 	glutInitWindowSize(width, height);
 	glutCreateWindow("OpenGL");
@@ -95,6 +107,7 @@ int main(int argc, char *argv[]){
 	glutReshapeFunc(reshape);
 	glutPassiveMotionFunc(MouseMove);
 	glutMouseFunc(MouseMoveClick);
+	glutKeyboardFunc(keyBoardFunc);
 	glutTimerFunc(0, timer, 0);
 	init();
 	glutMainLoop();
@@ -105,6 +118,19 @@ void timer(int){
 	glutPostRedisplay();
 	glutTimerFunc(1000 / 100, timer, 0);
 	display();
+}
+
+void enterRecordName(unsigned char key) {
+	while (key != 32) {
+		int size = 0;
+		record.name[size] = key;
+		size++;
+	}
+	process = MENUPROC;
+}
+
+void keyBoardFunc(unsigned char key, int x, int y) {
+	enterRecordName(key);
 }
 
 void renderBM(float x, float y, void *font, char *str){
@@ -122,15 +148,14 @@ void printText(int xPos, int yPos, int info){
 	renderBM(xPos, yPos, GLUT_BITMAP_TIMES_ROMAN_24, str);
 }
 
-void printText(char *str) {
+void printText(int xPos, int yPos, char *str) {
 	glColor3f(1.0, 1.0, 1.0);
-	renderBM(width / 2 - 80, height / 2, GLUT_BITMAP_TIMES_ROMAN_24, str);
+	renderBM(xPos, yPos, GLUT_BITMAP_TIMES_ROMAN_24, str);
 }
 
 void setLvlsInfo() {//Считывание кол-ва пройденных уровней и общего кол-ва уровней
 	lvlsPassed = readFile("progress.txt");
 	lvls = readFile("lvlsAmount.txt");
-	cout << "Completed";
 }
 
 bool isLvlOpen(int lvl) {
@@ -144,6 +169,57 @@ void saveProgress() {
 	if (file != NULL) {
 		fprintf(file, "%d", lvlsPassed);
 		fclose(file);
+	}
+}
+
+void sortRecords() {
+	for (int i = 0; i < recordsRows; i++) {
+		for (int j = i; j < recordsRows; j++)
+			if (records[i].score < records[j].score)
+				std::swap(records[i], records[j]);
+	}
+}
+
+void saveRecords() {
+	sortRecords();
+	FILE *file = fopen("records.txt", "w");
+	if (file != NULL) {
+		if (recordsRows > 9)
+			recordsRows = 9;
+		for (int i = 0; i < recordsRows; i++) {
+			fprintf(file, "%d.%s %d\n", records[i].priority, records[i].name, records[i].score);
+		}
+	}
+}
+
+void readRecords() {
+	int i = 0;
+	FILE *file = fopen("records.txt", "r");
+	if (file != NULL) {
+		while (!feof(file)) {
+			i++;
+			fscanf(file, "%d.%s %d\n", &record.priority, &record.name, &record.score);
+			records.push_back(record);
+		}
+		recordsRows = i;
+	}
+}
+
+void showRecords() {
+	int xPos = 60, yPos = 40;
+	for (int i = 0; i < recordsRows; i++) {
+		printText(xPos, yPos, records[i].priority);
+		xPos += 20;
+		printText(xPos, yPos, records[i].name);
+		xPos += 3 * width / 5;
+		printText(xPos, yPos, records[i].score);
+		yPos += 30;
+		xPos = 60;
+	}
+	menuBtn.CreateButton(15);
+	if (menuBtn.isClicked(x, y) && btnStart == GLUT_LEFT_BUTTON && btnState == GLUT_UP) {
+		process = MENUPROC;
+		btnStart = -1;
 	}
 }
 
@@ -242,23 +318,61 @@ void addLvlMenu() {
 		lvlBtns[i].CreateButton(i + 1);
 }
 
+void initGameModeMenu() {
+	int modeBtnH = 40, modeBtnW = 100, xSpacing = width / 2 - modeBtnW, ySpacing = height / 2 - modeBtnH/2;
+	for (int i = 0; i < 2; i++) {
+		gameModeButtons[i].setButtonPosition(xSpacing - 20, ySpacing, modeBtnW, modeBtnH);
+		xSpacing += 30 + modeBtnW;
+	}
+}
+
+void showGameModeMenu() {
+	for (int i = 0; i < 2; i++) {
+		gameModeButtons[i].CreateButton(i + 10);
+	}
+}
+
+void selectGameMode() {
+	showGameModeMenu();
+	if (btnStart == GLUT_LEFT_BUTTON) {
+		for (int i = 0; i < 2; i++) {
+			if (gameModeButtons[i].isClicked(x, y) && btnState == GLUT_UP) {
+				if (i == 0) {
+					process = NORMALMODE;
+					normalModeLvlPassed = 0;
+					mode = NORMALMODE;
+				}
+				if (i == 1) {
+					process = TRAINMODE;
+					mode = TRAINMODE;
+				}
+				return;
+			}
+		}
+	}
+}
+
 void menu(){
 	showMenu();
 	if (playBtn.isClicked(x, y) && btnStart == GLUT_LEFT_BUTTON && btnState == GLUT_UP) {
-		process = SELECTLVLPROC;
+		process = SELECTMODEPROC;
 		btnStart = -1;
 		score = 0;
 	}
+	else if (recordsBtn.isClicked(x, y) && btnStart == GLUT_LEFT_BUTTON && btnState == GLUT_UP)
+		process = SHOWRECORDS;
 	else if (exitBtn.isClicked(x, y) && btnStart == GLUT_LEFT_BUTTON && btnState == GLUT_UP)
 		process = EXIT;
 	
 }
 
 void initFunctions() {
+	readRecords();
 	initLvlMenu();
 	initMenuButtons();
 	setLvlsInfo();
 	initSubMenuButtons();
+	initGameModeMenu();
 	process = MENUPROC;
 }
 
@@ -299,6 +413,14 @@ bool hasBonus(int blockNum, int &index) {
 	return false;
 }
 
+int setScore(int lifes) {
+	if (lifes == 1)
+		return 10;
+	if (lifes == 2)
+		return 20;
+	return 30;
+}
+
 void collision(){
 	int index;
 	for (int i = 0; i < ballsAmount; i++) {
@@ -307,7 +429,7 @@ void collision(){
 				if (!verticalRebound(j))
 					xAngle *= -1;
 				blocks[j].durability--;
-				score += 20;
+				score += setScore(lifes);
 			}
 			if (blocks[j].durability == 0) {
 				if (hasBonus(j, index))
@@ -353,26 +475,31 @@ void addBall() {
 	ballsAmount++;
 }
 
-void selectLvl() {
+void loadLvl(int i) {
 	char lvlPath[10] = "lvl_", lvl[4] = "";
+	_itoa(i + 1, lvl, 10);
+	if (isLvlOpen(i + 1)) {
+		if (lvlsPassed = i + 1)
+			nextLvl = true;
+		strcat(lvlPath, lvl);
+		strcat(lvlPath, ".txt");
+		process = GAMEPROC;
+		btnStart = -1;
+		if(mode == TRAINMODE)
+			lifes = 3;
+		initBlocks(lvlPath);
+		initBonuses();
+		addBall();
+		glutSetCursor(GLUT_CURSOR_NONE);
+	}
+}
+
+void selectLvl() {
 	if (btnStart == GLUT_LEFT_BUTTON) {
 		for (int i = 0; i < 10; i++) {
 			if (lvlBtns[i].isClicked(x, y) && btnState == GLUT_UP) {
-				_itoa(i + 1, lvl, 10);
-				if (isLvlOpen(i+1)) {
-					if (lvlsPassed = i + 1)
-						nextLvl = true;
-					strcat(lvlPath, lvl);
-					strcat(lvlPath, ".txt");
-					process = GAMEPROC;
-					btnStart = -1;
-					lifes = 3;
-					initBlocks(lvlPath);
-					initBonuses();
-					addBall();
-					glutSetCursor(GLUT_CURSOR_NONE);
-				}
-				else process = SELECTLVLPROC;
+				loadLvl(i);
+				break;
 			}
 		}
 	}
@@ -416,19 +543,29 @@ void switchColor(int color) {
 		glColor3f(0.3, 0.0, 0.0);
 }
 
-void lvlPassed() {
-	process = SUBMENUPROC;
+void clearData() {
 	balls.clear();
 	ballsAmount = 0;
 	blocks.clear();
 	blockAmount = 0;
+	bonuses.clear();
+	bonusAmount = 0;
+}
+
+void lvlPassed(int mode) {
+	if (mode == NORMALMODE)
+		process = NORMALMODE;
+	else {
+		process = TRAINMODE;
+		score = 0;
+	}
+	normalModeLvlPassed++;
 	if(nextLvl)
 		lvlsPassed++;
 	nextLvl = false;
 	yAngle = 1.0;
 	saveProgress();
-	bonuses.clear();
-	bonusAmount = 0;
+	clearData();
 }
 
 void ViewBlocks(){
@@ -442,7 +579,7 @@ void ViewBlocks(){
 		glEnd();
 	}
 	if (blockAmount == 0) {
-		lvlPassed();
+		lvlPassed(mode);
 	}
 }
 
@@ -545,7 +682,7 @@ void applyBonus(int bonusType) {
 	if (bonusType == 0)
 		plateWidth += plateWidth / 10;
 	if (bonusType == 1)
-		addBall();
+		balls[0].radius = 9;
 	if (bonusType == 2)
 		lifes++;
 }
@@ -558,8 +695,8 @@ void drawBonus(int bonusIndex) {
 		glVertex2f(bonuses[bonusIndex].x, bonuses[bonusIndex].y);
 		glEnd();
 		bonuses[bonusIndex].y++;
-		//if(plateCollision(bonuses[bonusIndex].x, bonuses[bonusIndex].y, 0))
-		//	applyBonus(bonuses[bonusIndex].bonusType);
+		if(plateCollision(bonuses[bonusIndex].x, bonuses[bonusIndex].y, 0))
+			applyBonus(bonuses[bonusIndex].bonusType);
 	}
 	else {
 		bonuses.erase(bonuses.begin() + bonusIndex);
@@ -580,16 +717,22 @@ void printGameInfo() {
 }
 
 void game() {
-	printGameInfo();
-	collision();
-	drawBall();
-	activeBonuses();
-	ViewBlocks();
-	drawPlate();
-	
+	if (lifes > 0) {
+		printGameInfo();
+		collision();
+		drawBall();
+		activeBonuses();
+		ViewBlocks();
+		drawPlate();
+	}
+	else {
+		process = SUBMENUPROC;
+		clearData();
+	}
 }
 
 void display(){
+	
 	ShowCursor(true);
 	glClear(GL_COLOR_BUFFER_BIT);
 	glLoadIdentity();
@@ -597,9 +740,15 @@ void display(){
 		case MENUPROC:
 			menu();
 			break;
-		case SELECTLVLPROC:
+		case TRAINMODE:
 			addLvlMenu();
 			selectLvl();
+			break;
+		case NORMALMODE:
+			loadLvl(normalModeLvlPassed);
+			break;
+		case SELECTMODEPROC:
+			selectGameMode();
 			break;
 		case SUBMENUPROC:
 			subMenu();
@@ -611,12 +760,17 @@ void display(){
 			ShowCursor(false);
 			game();
 			break;
+		case SHOWRECORDS:
+			showRecords();
+			break;
 		case EXIT:
+			saveRecords();
 			glutDestroyWindow(1);
 			break;
 	}
 	if(process != EXIT)
 		glutSwapBuffers();
+	btnStart = -1;
 }
 
 void reshape(int w, int h){
