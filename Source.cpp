@@ -9,8 +9,7 @@
 #pragma comment( lib, "GLAUX.LIB" )
 using namespace std;
 
-//#define width 480
-//#define height 600
+
 #define PLAYBTN 1
 #define RECORDSBTN 2
 #define EXITBTN 0
@@ -23,6 +22,7 @@ using namespace std;
 #define SELECTMODEPROC 106
 #define NORMALMODE 107
 #define SHOWRECORDS 108
+#define ENTERTEXT 109
 #define EXIT 110
 
 using namespace std;
@@ -32,10 +32,12 @@ int width = 480, height = 600;
 int x = -1, y = -1, btnWidth = 150, btnState,btnStart, btnPressed = -1, plateWidth = width/5, xLeftPlatePos, xRightPlatePos, lifes = 3;
 int xMousePos = 0, yPlatePos = 3 * height / 4 + 5, yPrevPlatePos = 0;
 int blockAmount = 0, score = 0, mode, recordsRows = 0;
-bool destroyWnd = false, nextLvl = false;
+bool destroyWnd = false, nextLvl = false, activeKey = false;
 float xAngle = 2.0, yAngle = 1.0;
 int blockHeight = 20, blockWidth = 50, process = INITPROC, lvlsPassed, lvls, bonusAmount = 0, ballsAmount = 0, normalModeLvlPassed = 0;
 //50 20
+unsigned char keyS;
+unsigned int BG;
 
 struct Ball {
 	int radius = 7;
@@ -71,6 +73,7 @@ vector<Record> records;
 void MouseMove(int ax, int ay){
 	xMousePos = ax;
 }
+AUX_RGBImageRec *bg;
 
 void display();
 void timer(int);
@@ -79,13 +82,26 @@ void initBlocks(char *lvlPath);
 void setLvlsInfo();
 int readFile(char *path);
 void saveProgress();
+void addRecord();
+void drawBG();
+void saveRecords();
 void keyBoardFunc(unsigned char key, int x, int y);
+void clearData();
 void init(){
-	glClearColor(0.8, 0.7, 0.7, 1.0);
+	//glClearColor(0.8, 0.7, 0.7, 1.0);
 	glMatrixMode(GL_PROJECTION);
 	glLoadIdentity();
 	glOrtho(0, width, height, 0, 0, 1);
 	glMatrixMode(GL_MODELVIEW);
+	bg = auxDIBImageLoadA("3.bmp");
+	glRasterPos2d(0, height);                    // нижний левый угол
+	glPixelZoom(1, 1);
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);         // выравнивание
+	glDrawPixels(bg->sizeX, bg->sizeY, // ширина и высота
+		GL_RGB, GL_UNSIGNED_BYTE,      // формат и тип
+		bg->data);
+	glFlush();
+	
 }
 
 void MouseMoveClick(int btn, int state, int ax, int ay){
@@ -120,20 +136,17 @@ void timer(int){
 	display();
 }
 
-void enterRecordName(unsigned char key) {
-	while (key != 32) {
-		int size = 0;
-		record.name[size] = key;
-		size++;
-	}
-	process = MENUPROC;
+void drawBG() {
+	glRasterPos2d(0, height);                    // нижний левый угол
+	glPixelZoom(1, 1);
+	//glPixelStorei(GL_UNPACK_ALIGNMENT, 4);         // выравнивание
+	glDrawPixels(bg->sizeX, bg->sizeY, // ширина и высота
+		GL_RGB, GL_UNSIGNED_BYTE,      // формат и тип
+		bg->data);
+	glFlush();
 }
 
-void keyBoardFunc(unsigned char key, int x, int y) {
-	enterRecordName(key);
-}
-
-void renderBM(float x, float y, void *font, char *str){
+void renderBM(float x, float y, void *font, char *str) {
 	char *c;
 	glRasterPos2f(x, y);
 	for (c = str; *c != '\0'; c++) {
@@ -141,7 +154,7 @@ void renderBM(float x, float y, void *font, char *str){
 	}
 }
 
-void printText(int xPos, int yPos, int info){
+void printText(int xPos, int yPos, int info) {
 	glColor3f(1.0, 1.0, 1.0);
 	char str[15];
 	_itoa(info, str, 10);
@@ -152,16 +165,47 @@ void printText(int xPos, int yPos, char *str) {
 	glColor3f(1.0, 1.0, 1.0);
 	renderBM(xPos, yPos, GLUT_BITMAP_TIMES_ROMAN_24, str);
 }
+int s = 0;
+void enterRecordName(unsigned char key) {
+	static int x = width/2;
+	printText(width / 2 + 100, height / 4, "Введите имя рекорда : ");
+	if (activeKey) {
+		if (key == 8 && s > 0) {
+			s--;
+			record.name[s] = '\0';
+			x += 8;
+		}
+		else {
+			record.name[s] = key;
+			s++;
+			record.name[s] = '\0';
+			x -= 8;
+		}
+		activeKey = false;
+	}
+	printText(x, height/2, record.name);
+}
+
+void keyBoardFunc(unsigned char key, int x, int y) {
+	if (key == 27 && process == MENUPROC) {
+		exit(0);
+	}
+	if (key == 27) {
+		clearData();
+		process = MENUPROC;
+	}
+	if (key == 13 && process == ENTERTEXT) {
+		addRecord();
+		saveRecords();
+		process = SHOWRECORDS;
+	}
+	keyS = key;
+	activeKey = true;
+}
 
 void setLvlsInfo() {//Считывание кол-ва пройденных уровней и общего кол-ва уровней
 	lvlsPassed = readFile("progress.txt");
 	lvls = readFile("lvlsAmount.txt");
-}
-
-bool isLvlOpen(int lvl) {
-	if (lvl <= lvlsPassed)
-		return true;
-	return false;
 }
 
 void saveProgress() {
@@ -174,9 +218,11 @@ void saveProgress() {
 
 void sortRecords() {
 	for (int i = 0; i < recordsRows; i++) {
-		for (int j = i; j < recordsRows; j++)
+		for (int j = i; j < recordsRows; j++) {
+			records[i].priority = i + 1;
 			if (records[i].score < records[j].score)
 				std::swap(records[i], records[j]);
+		}
 	}
 }
 
@@ -184,8 +230,6 @@ void saveRecords() {
 	sortRecords();
 	FILE *file = fopen("records.txt", "w");
 	if (file != NULL) {
-		if (recordsRows > 9)
-			recordsRows = 9;
 		for (int i = 0; i < recordsRows; i++) {
 			fprintf(file, "%d.%s %d\n", records[i].priority, records[i].name, records[i].score);
 		}
@@ -193,29 +237,32 @@ void saveRecords() {
 }
 
 void readRecords() {
-	int i = 0;
 	FILE *file = fopen("records.txt", "r");
 	if (file != NULL) {
 		while (!feof(file)) {
-			i++;
-			fscanf(file, "%d.%s %d\n", &record.priority, &record.name, &record.score);
-			records.push_back(record);
+			if (fscanf(file, "%d.%s %d\n", &record.priority, &record.name, &record.score) == 3) {
+				recordsRows++;
+				records.push_back(record);
+			}
 		}
-		recordsRows = i;
 	}
 }
 
 void showRecords() {
 	int xPos = 60, yPos = 40;
-	for (int i = 0; i < recordsRows; i++) {
-		printText(xPos, yPos, records[i].priority);
-		xPos += 20;
-		printText(xPos, yPos, records[i].name);
-		xPos += 3 * width / 5;
-		printText(xPos, yPos, records[i].score);
-		yPos += 30;
-		xPos = 60;
+	if (recordsRows > 0){
+		for (int i = 0; i < recordsRows; i++) {
+			printText(xPos, yPos, records[i].priority);
+			xPos += 30;
+			printText(xPos, yPos, records[i].name);
+			xPos += 3 * width / 5;
+			printText(xPos, yPos, records[i].score);
+			yPos += 30;
+			xPos = 60;
+		}
 	}
+	else
+		printText(xPos, yPos, "Рекордов не установлено");
 	menuBtn.CreateButton(15);
 	if (menuBtn.isClicked(x, y) && btnStart == GLUT_LEFT_BUTTON && btnState == GLUT_UP) {
 		process = MENUPROC;
@@ -274,7 +321,7 @@ void showMenu(){
 
 void initSubMenuButtons() {
 	int subMenuBtnH = 40, subMenuBtnW = 80;
-	menuBtn.setButtonPosition(width / 2 - subMenuBtnW / 2, height / 2, subMenuBtnW, subMenuBtnH);
+	menuBtn.setButtonPosition(width / 2 - subMenuBtnW / 2, 3*height / 4, subMenuBtnW, subMenuBtnH);
 	nextLvlBtn.setButtonPosition(width / 2 + subMenuBtnW, height / 2, subMenuBtnW, subMenuBtnH);
 }
 
@@ -356,7 +403,7 @@ void menu(){
 	showMenu();
 	if (playBtn.isClicked(x, y) && btnStart == GLUT_LEFT_BUTTON && btnState == GLUT_UP) {
 		process = SELECTMODEPROC;
-		btnStart = -1;
+		//btnStart = -1;
 		score = 0;
 	}
 	else if (recordsBtn.isClicked(x, y) && btnStart == GLUT_LEFT_BUTTON && btnState == GLUT_UP)
@@ -475,30 +522,36 @@ void addBall() {
 	ballsAmount++;
 }
 
+bool isLvlOpen(int lvl) {
+	if (lvl <= lvlsPassed)
+		return true;
+	return false;
+}
+
 void loadLvl(int i) {
 	char lvlPath[10] = "lvl_", lvl[4] = "";
 	_itoa(i + 1, lvl, 10);
-	if (isLvlOpen(i + 1)) {
-		if (lvlsPassed = i + 1)
-			nextLvl = true;
 		strcat(lvlPath, lvl);
 		strcat(lvlPath, ".txt");
 		process = GAMEPROC;
 		btnStart = -1;
-		if(mode == TRAINMODE)
-			lifes = 3;
+		if(mode == TRAINMODE || i == 0)
+		lifes = 3;
 		initBlocks(lvlPath);
 		initBonuses();
 		addBall();
 		glutSetCursor(GLUT_CURSOR_NONE);
-	}
 }
 
 void selectLvl() {
 	if (btnStart == GLUT_LEFT_BUTTON) {
 		for (int i = 0; i < 10; i++) {
 			if (lvlBtns[i].isClicked(x, y) && btnState == GLUT_UP) {
-				loadLvl(i);
+				if (isLvlOpen(i + 1)) {
+					if (lvlsPassed = i + 1)
+						nextLvl = true;
+					loadLvl(i);
+				}
 				break;
 			}
 		}
@@ -553,16 +606,17 @@ void clearData() {
 }
 
 void lvlPassed(int mode) {
-	if (mode == NORMALMODE)
+	if (mode == NORMALMODE) {
 		process = NORMALMODE;
+		normalModeLvlPassed++;
+	}
 	else {
+		if (nextLvl)
+			lvlsPassed++;
+		nextLvl = false;
 		process = TRAINMODE;
 		score = 0;
 	}
-	normalModeLvlPassed++;
-	if(nextLvl)
-		lvlsPassed++;
-	nextLvl = false;
 	yAngle = 1.0;
 	saveProgress();
 	clearData();
@@ -716,6 +770,29 @@ void printGameInfo() {
 	printText(width / 2, height - 30, lifes);
 }
 
+bool isRecord() {
+	if (recordsRows < 10)
+		return true;
+	for (int i = 0; i < recordsRows; i++) {
+		if (score > records[i].score) {
+			return true;
+		}
+	}
+	return false;
+}
+
+void addRecord() {
+	record.score = score;
+	record.priority = recordsRows;
+	if (recordsRows < 10) {
+		recordsRows++;
+	}
+	else {
+		records.erase(records.begin() + recordsRows - 1);
+	}
+	records.push_back(record);
+}
+
 void game() {
 	if (lifes > 0) {
 		printGameInfo();
@@ -726,15 +803,19 @@ void game() {
 		drawPlate();
 	}
 	else {
-		process = SUBMENUPROC;
+		if (isRecord()) {
+			process = ENTERTEXT;
+			strcpy(record.name, "");
+		}
+		else
+			process = MENUPROC;
 		clearData();
 	}
 }
 
 void display(){
-	
-	ShowCursor(true);
-	glClear(GL_COLOR_BUFFER_BIT);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	drawBG();
 	glLoadIdentity();
 	switch (process) {
 		case MENUPROC:
@@ -763,14 +844,17 @@ void display(){
 		case SHOWRECORDS:
 			showRecords();
 			break;
+		case ENTERTEXT:
+			enterRecordName(keyS);
+			break;
 		case EXIT:
-			saveRecords();
 			glutDestroyWindow(1);
 			break;
 	}
 	if(process != EXIT)
 		glutSwapBuffers();
 	btnStart = -1;
+	ShowCursor(true);
 }
 
 void reshape(int w, int h){
