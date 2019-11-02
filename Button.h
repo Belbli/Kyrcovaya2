@@ -1,4 +1,6 @@
 #pragma once
+#include <GL\glut.h>
+
 class Button
 {
 private:
@@ -6,17 +8,14 @@ private:
 	int cy;
 	int width;
 	int height;
+	GLuint text;
 	unsigned int btnId;
-	//float xMousePos;
-	//float yMousPos;
-	//bool clicked = false;
 
 public:
 	Button();
 	void Button::CreateButton(int btnId);
-	void Button::setButtonPosition(int cx, int cy, int width, int height);
+	void Button::setButtonPosition(int cx, int cy, int width, int height, GLuint text);
 	bool Button::isClicked(float xMousePos, float yMousePos);
-	//void CreateButton(float cx, float cy, float width, float height);
 	~Button();
 };
 

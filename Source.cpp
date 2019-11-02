@@ -4,9 +4,8 @@
 #include<math.h>
 #include<vector>
 #include<iostream>
+#include<soil.h>
 #include<ctime>
-#include<glaux.h>
-#pragma comment( lib, "GLAUX.LIB" )
 using namespace std;
 
 
@@ -73,7 +72,6 @@ vector<Record> records;
 void MouseMove(int ax, int ay){
 	xMousePos = ax;
 }
-AUX_RGBImageRec *bg;
 
 void display();
 void timer(int);
@@ -83,25 +81,51 @@ void setLvlsInfo();
 int readFile(char *path);
 void saveProgress();
 void addRecord();
-void drawBG();
 void saveRecords();
 void keyBoardFunc(unsigned char key, int x, int y);
 void clearData();
+
 void init(){
-	//glClearColor(0.8, 0.7, 0.7, 1.0);
 	glMatrixMode(GL_PROJECTION);
 	glLoadIdentity();
 	glOrtho(0, width, height, 0, 0, 1);
 	glMatrixMode(GL_MODELVIEW);
-	bg = auxDIBImageLoadA("3.bmp");
-	glRasterPos2d(0, height);                    // нижний левый угол
-	glPixelZoom(1, 1);
-	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);         // выравнивание
-	glDrawPixels(bg->sizeX, bg->sizeY, // ширина и высота
-		GL_RGB, GL_UNSIGNED_BYTE,      // формат и тип
-		bg->data);
-	glFlush();
 	
+}
+
+GLuint bgTexture, playBtnTex, recBtnTex, exitBtnTex, menuBtnTex, lvlBtnTex[10], normalBtnTex, trainBtnTex;
+
+GLuint load_texture(const char *apFileName) {
+	GLuint texture;
+	texture = SOIL_load_OGL_texture(apFileName,
+		SOIL_LOAD_AUTO,
+		SOIL_CREATE_NEW_ID,
+		SOIL_FLAG_MIPMAPS | SOIL_FLAG_INVERT_Y | SOIL_FLAG_NTSC_SAFE_RGB | SOIL_FLAG_COMPRESS_TO_DXT);
+	return texture;
+}
+
+void loadLvlBtnsTextures() {
+	char buff[3];
+	for (int i = 0; i < 10; i++) {
+		char path[15] = "";
+		char namePart[10] = "lvlBtn_";
+		_itoa(i + 1, buff, 10);
+		strcat(namePart, buff);
+		strcat(path, namePart);
+		strcat(path, ".jpg");
+		lvlBtnTex[i] = load_texture(path);
+	}
+}
+
+void loadImages() {
+	bgTexture = load_texture("2.png");
+	menuBtnTex = load_texture("menuBtn.jpg");
+	playBtnTex = load_texture("playBtn.jpg");
+	recBtnTex = load_texture("recBtn.jpg");
+	exitBtnTex = load_texture("exitBtn.jpg");
+	trainBtnTex = load_texture("trainModeBtn.jpg");
+	normalBtnTex = load_texture("normalModeBtn.jpg");
+	loadLvlBtnsTextures();
 }
 
 void MouseMoveClick(int btn, int state, int ax, int ay){
@@ -117,8 +141,8 @@ int main(int argc, char *argv[]){
 	glutInitDisplayMode(GLUT_RGB | GLUT_DOUBLE);
 	glutInitWindowPosition(50, 50);
 	glutInitWindowSize(width, height);
-	glutCreateWindow("OpenGL");
-	glutSetCursor(GLUT_CURSOR_LEFT_ARROW);
+	glutCreateWindow("Arcanoid");
+	loadImages();
 	glutDisplayFunc(display);
 	glutReshapeFunc(reshape);
 	glutPassiveMotionFunc(MouseMove);
@@ -136,14 +160,17 @@ void timer(int){
 	display();
 }
 
-void drawBG() {
-	glRasterPos2d(0, height);                    // нижний левый угол
-	glPixelZoom(1, 1);
-	//glPixelStorei(GL_UNPACK_ALIGNMENT, 4);         // выравнивание
-	glDrawPixels(bg->sizeX, bg->sizeY, // ширина и высота
-		GL_RGB, GL_UNSIGNED_BYTE,      // формат и тип
-		bg->data);
-	glFlush();
+void drawTexture(int aX, int aY, int aW, int aH, GLuint aTextID) {
+	glColor3f(1.0, 1.0, 1.0);
+	glEnable(GL_TEXTURE_2D);
+	glBindTexture(GL_TEXTURE_2D, aTextID);
+	glBegin(GL_QUADS);
+	glTexCoord2i(0, 0); glVertex2i(aX + aW, aY + aH);
+	glTexCoord2i(1, 0); glVertex2i(aX, aY + aH);
+	glTexCoord2i(1, 1); glVertex2i(aX , aY);
+	glTexCoord2i(0, 1); glVertex2i(aX + aW, aY);
+	glEnd();
+	glDisable(GL_TEXTURE_2D);
 }
 
 void renderBM(float x, float y, void *font, char *str) {
@@ -155,19 +182,19 @@ void renderBM(float x, float y, void *font, char *str) {
 }
 
 void printText(int xPos, int yPos, int info) {
-	glColor3f(1.0, 1.0, 1.0);
+	glColor3f(0.0, 0.0, 0.0);
 	char str[15];
 	_itoa(info, str, 10);
 	renderBM(xPos, yPos, GLUT_BITMAP_TIMES_ROMAN_24, str);
 }
 
 void printText(int xPos, int yPos, char *str) {
-	glColor3f(1.0, 1.0, 1.0);
+	glColor3f(0.0, 0.0, 0.0);
 	renderBM(xPos, yPos, GLUT_BITMAP_TIMES_ROMAN_24, str);
 }
-int s = 0;
+
 void enterRecordName(unsigned char key) {
-	static int x = width/2;
+	static int x = width/2, s = 0;
 	printText(width / 2 + 100, height / 4, "Введите имя рекорда : ");
 	if (activeKey) {
 		if (key == 8 && s > 0) {
@@ -295,6 +322,7 @@ char *loadLvl(char *path) {
 		while (fgets(buff, buffSize, file) != NULL) {
 			strcat(dest, buff);
 		}
+		free(buff);
 		fclose(file);
 		return dest;
 	}
@@ -305,11 +333,10 @@ char *loadLvl(char *path) {
 
 void initMenuButtons() {
 	int btnHeight = 40;
-	int lineSpace = btnHeight + 30;
-
-	playBtn.setButtonPosition(width / 2 - btnWidth / 2, height / 4, btnWidth, btnHeight);
-	recordsBtn.setButtonPosition(width / 2 - btnWidth / 2, height / 4 + lineSpace, btnWidth, btnHeight);
-	exitBtn.setButtonPosition(width / 2 - btnWidth / 2, height / 4 + 2 * lineSpace, btnWidth, btnHeight);
+	int lineSpace = btnHeight + 50;
+	playBtn.setButtonPosition(width / 2 - btnWidth / 2, height / 4, btnWidth, btnHeight, playBtnTex);
+	recordsBtn.setButtonPosition(width / 2 - btnWidth / 2, height / 4 + lineSpace, btnWidth, btnHeight, recBtnTex);
+	exitBtn.setButtonPosition(width / 2 - btnWidth / 2, height / 4 + 2 * lineSpace, btnWidth, btnHeight, exitBtnTex);
 }
 
 void showMenu(){
@@ -321,8 +348,8 @@ void showMenu(){
 
 void initSubMenuButtons() {
 	int subMenuBtnH = 40, subMenuBtnW = 80;
-	menuBtn.setButtonPosition(width / 2 - subMenuBtnW / 2, 3*height / 4, subMenuBtnW, subMenuBtnH);
-	nextLvlBtn.setButtonPosition(width / 2 + subMenuBtnW, height / 2, subMenuBtnW, subMenuBtnH);
+	menuBtn.setButtonPosition(width / 2 - subMenuBtnW / 2, 3*height / 4, subMenuBtnW, subMenuBtnH, menuBtnTex);
+	/*nextLvlBtn.setButtonPosition(width / 2 + subMenuBtnW, height / 2, subMenuBtnW, subMenuBtnH);*/
 }
 
 void addSubMenuButtons() {
@@ -332,7 +359,6 @@ void addSubMenuButtons() {
 
 void subMenu() {
 	char *lvlPath;
-	glutSetCursor(GLUT_CURSOR_LEFT_ARROW);
 	initSubMenuButtons();
 	addSubMenuButtons();
 	if (menuBtn.isClicked(x, y) && btnStart == GLUT_LEFT_BUTTON && btnState == GLUT_UP) {
@@ -347,15 +373,15 @@ void subMenu() {
 }
 
 void initLvlMenu() {
-	int lvlBtnH = 60, lvlBtnW = 80, xSpacing = 100, ySpacing = 0, t = 0;
+	int lvlBtnH = 60, lvlBtnW = 80, xSpacing = 120, ySpacing = 50, t = 0;
 	for (int i = 0; i < 10; i++) {
-		if ((i) % 2 == 0) {
+		if ((i) % 2 == 0 && i != 0) {
 			ySpacing += 3 * lvlBtnH / 2;
-			xSpacing = 0;
+			xSpacing = 120;
 			t = 0;
 		}
-		xSpacing += t * (lvlBtnW + 10);
-		lvlBtns[i].setButtonPosition(xSpacing, ySpacing, lvlBtnW, lvlBtnH);
+		xSpacing += t * (lvlBtnW + 80);
+		lvlBtns[i].setButtonPosition(xSpacing, ySpacing, lvlBtnW, lvlBtnH, lvlBtnTex[i]);
 		t++;
 	}
 }
@@ -367,10 +393,9 @@ void addLvlMenu() {
 
 void initGameModeMenu() {
 	int modeBtnH = 40, modeBtnW = 100, xSpacing = width / 2 - modeBtnW, ySpacing = height / 2 - modeBtnH/2;
-	for (int i = 0; i < 2; i++) {
-		gameModeButtons[i].setButtonPosition(xSpacing - 20, ySpacing, modeBtnW, modeBtnH);
-		xSpacing += 30 + modeBtnW;
-	}
+	gameModeButtons[0].setButtonPosition(xSpacing - 20, ySpacing, modeBtnW, modeBtnH, normalBtnTex);
+	xSpacing += 30 + modeBtnW;
+	gameModeButtons[1].setButtonPosition(xSpacing - 20, ySpacing, modeBtnW, modeBtnH, trainBtnTex);
 }
 
 void showGameModeMenu() {
@@ -403,7 +428,6 @@ void menu(){
 	showMenu();
 	if (playBtn.isClicked(x, y) && btnStart == GLUT_LEFT_BUTTON && btnState == GLUT_UP) {
 		process = SELECTMODEPROC;
-		//btnStart = -1;
 		score = 0;
 	}
 	else if (recordsBtn.isClicked(x, y) && btnStart == GLUT_LEFT_BUTTON && btnState == GLUT_UP)
@@ -803,7 +827,7 @@ void game() {
 		drawPlate();
 	}
 	else {
-		if (isRecord()) {
+		if (isRecord() && mode == NORMALMODE) {
 			process = ENTERTEXT;
 			strcpy(record.name, "");
 		}
@@ -814,9 +838,12 @@ void game() {
 }
 
 void display(){
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	drawBG();
+	
+	glClear(GL_COLOR_BUFFER_BIT);
 	glLoadIdentity();
+	drawTexture(0, 0, width, height, bgTexture);
+	if(process != GAMEPROC)
+		glutSetCursor(GLUT_CURSOR_LEFT_ARROW);
 	switch (process) {
 		case MENUPROC:
 			menu();
@@ -838,7 +865,7 @@ void display(){
 			initFunctions();
 			break;
 		case GAMEPROC:
-			ShowCursor(false);
+			glutSetCursor(GLUT_CURSOR_NONE);
 			game();
 			break;
 		case SHOWRECORDS:
@@ -854,7 +881,7 @@ void display(){
 	if(process != EXIT)
 		glutSwapBuffers();
 	btnStart = -1;
-	ShowCursor(true);
+	//ShowCursor(true);
 }
 
 void reshape(int w, int h){
@@ -866,11 +893,6 @@ void reshape(int w, int h){
 	glViewport(0, 0, w, h);
 	glMatrixMode(GL_PROJECTION);
 	glLoadIdentity();
-	//if (w <= h)
-	//	gluOrtho2D(0, width, height * wh, 0);
-	//else 
-	//	gluOrtho2D(0, width * wh, height, 0);
-	//gluPerspective(360, wh, 1, 10);
 	gluOrtho2D(0, width, height, 0);
 	glMatrixMode(GL_MODELVIEW);
 	plateWidth = width / 4;
