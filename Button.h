@@ -9,11 +9,10 @@ private:
 	int width;
 	int height;
 	GLuint text;
-	unsigned int btnId;
 
 public:
 	Button();
-	void Button::CreateButton(int btnId);
+	void Button::CreateButton();
 	void Button::setButtonPosition(int cx, int cy, int width, int height, GLuint text);
 	bool Button::isClicked(float xMousePos, float yMousePos);
 	~Button();

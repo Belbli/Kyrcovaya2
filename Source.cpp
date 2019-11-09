@@ -1,6 +1,6 @@
 #define _CRT_SECURE_NO_WARNINGS
-#include<GL/glut.h>
 #include"Button.h"
+#include "FilesFuntions.h"
 #include<math.h>
 #include<vector>
 #include<iostream>
@@ -9,9 +9,7 @@
 using namespace std;
 
 
-#define PLAYBTN 1
-#define RECORDSBTN 2
-#define EXITBTN 0
+
 #define MENUPROC 100
 #define GAMEPROC 101
 #define SUBMENUPROC 102
@@ -26,10 +24,10 @@ using namespace std;
 
 using namespace std;
 
-Button playBtn, recordsBtn, exitBtn , nextLvlBtn, menuBtn, replayBtn, lvlBtns[10], gameModeButtons[2];
-int width = 480, height = 600;
-int x = -1, y = -1, btnWidth = 150, btnState,btnStart, btnPressed = -1, plateWidth = width/5, xLeftPlatePos, xRightPlatePos, lifes = 3;
-int xMousePos = 0, yPlatePos = 3 * height / 4 + 5, yPrevPlatePos = 0;
+Button playBtn, recordsBtn, exitBtn, nextLvlBtn, menuBtn, replayBtn, lvlBtns[10], gameModeButtons[2], backBtn;
+int windowWidth = 480, windowHeight = 600;
+int x = -1, y = -1, btnWidth = 150, btnState, btnStart, btnPressed = -1, plateWidth = windowWidth / 5, xLeftPlatePos, xRightPlatePos, lifes = 3;
+int xMousePos = 0, yPlatePos = 3 * windowHeight / 4 + 5, yPrevPlatePos = 0, trainModeLvlPassed = 0, availableLvls = 0;
 int blockAmount = 0, score = 0, mode, recordsRows = 0;
 bool destroyWnd = false, nextLvl = false, activeKey = false;
 float xAngle = 2.0, yAngle = 1.0;
@@ -56,6 +54,7 @@ struct block {
 	int xb;
 	int yb;
 	int durability; 
+	GLuint tex;
 } item;
 
 struct Record {
@@ -79,7 +78,7 @@ void reshape(int, int);
 void initBlocks(char *lvlPath);
 void setLvlsInfo();
 int readFile(char *path);
-void saveProgress();
+//void saveProgress();
 void addRecord();
 void saveRecords();
 void keyBoardFunc(unsigned char key, int x, int y);
@@ -88,12 +87,13 @@ void clearData();
 void init(){
 	glMatrixMode(GL_PROJECTION);
 	glLoadIdentity();
-	glOrtho(0, width, height, 0, 0, 1);
+	glOrtho(0, windowWidth, windowHeight, 0, 0, 1);
 	glMatrixMode(GL_MODELVIEW);
 	
 }
 
-GLuint bgTexture, playBtnTex, recBtnTex, exitBtnTex, menuBtnTex, lvlBtnTex[10], normalBtnTex, trainBtnTex;
+GLuint bgTexture, playBtnTex, recBtnTex, exitBtnTex, menuBtnTex,
+lvlBtnTex[10], normalBtnTex, trainBtnTex, nextLvlBtnTex, backBtnTex, blocksTex[4];
 
 GLuint load_texture(const char *apFileName) {
 	GLuint texture;
@@ -117,6 +117,17 @@ void loadLvlBtnsTextures() {
 	}
 }
 
+void loadBlocksTextures() {
+	char buff[3];
+	for (int i = 0; i < 4; i++) {
+		char path[12] = "block_";
+		_itoa(i + 1, buff, 10);
+		strcat(path, buff);
+		strcat(path, ".jpg");
+		blocksTex[i] = load_texture(path);
+	}
+}
+
 void loadImages() {
 	bgTexture = load_texture("2.png");
 	menuBtnTex = load_texture("menuBtn.jpg");
@@ -124,7 +135,10 @@ void loadImages() {
 	recBtnTex = load_texture("recBtn.jpg");
 	exitBtnTex = load_texture("exitBtn.jpg");
 	trainBtnTex = load_texture("trainModeBtn.jpg");
+	nextLvlBtnTex = load_texture("nextLvlBtn.jpg");
 	normalBtnTex = load_texture("normalModeBtn.jpg");
+	backBtnTex = load_texture("backBtn.jpg");
+	loadBlocksTextures();
 	loadLvlBtnsTextures();
 }
 
@@ -136,11 +150,12 @@ void MouseMoveClick(int btn, int state, int ax, int ay){
 }
 
 int main(int argc, char *argv[]){
+	setlocale(LC_ALL, "RUSSIAN");
 	srand(time(NULL));
 	glutInit(&argc, argv);
 	glutInitDisplayMode(GLUT_RGB | GLUT_DOUBLE);
 	glutInitWindowPosition(50, 50);
-	glutInitWindowSize(width, height);
+	glutInitWindowSize(windowWidth, windowHeight);
 	glutCreateWindow("Arcanoid");
 	loadImages();
 	glutDisplayFunc(display);
@@ -194,8 +209,8 @@ void printText(int xPos, int yPos, char *str) {
 }
 
 void enterRecordName(unsigned char key) {
-	static int x = width/2, s = 0;
-	printText(width / 2 + 100, height / 4, "Введите имя рекорда : ");
+	static int x = windowWidth/2, s = 0;
+	printText(windowWidth/2 - strlen("Enter Your Name : "), windowHeight/4, "Enter Your Name : ");
 	if (activeKey) {
 		if (key == 8 && s > 0) {
 			s--;
@@ -210,7 +225,7 @@ void enterRecordName(unsigned char key) {
 		}
 		activeKey = false;
 	}
-	printText(x, height/2, record.name);
+	printText(x, windowHeight/2, record.name);
 }
 
 void keyBoardFunc(unsigned char key, int x, int y) {
@@ -231,17 +246,17 @@ void keyBoardFunc(unsigned char key, int x, int y) {
 }
 
 void setLvlsInfo() {//Считывание кол-ва пройденных уровней и общего кол-ва уровней
-	lvlsPassed = readFile("progress.txt");
+	availableLvls = readFile("progress.txt");
 	lvls = readFile("lvlsAmount.txt");
 }
 
-void saveProgress() {
-	FILE *file = fopen("progress.txt", "w+");
-	if (file != NULL) {
-		fprintf(file, "%d", lvlsPassed);
-		fclose(file);
-	}
-}
+//void saveProgress() {
+//	FILE *file = fopen("progress.txt", "w+");
+//	if (file != NULL) {
+//		fprintf(file, "%d", availableLvls);
+//		fclose(file);
+//	}
+//}
 
 void sortRecords() {
 	for (int i = 0; i < recordsRows; i++) {
@@ -276,13 +291,14 @@ void readRecords() {
 }
 
 void showRecords() {
+	sortRecords();
 	int xPos = 60, yPos = 40;
 	if (recordsRows > 0){
 		for (int i = 0; i < recordsRows; i++) {
 			printText(xPos, yPos, records[i].priority);
 			xPos += 30;
 			printText(xPos, yPos, records[i].name);
-			xPos += 3 * width / 5;
+			xPos += 3 * windowWidth / 5;
 			printText(xPos, yPos, records[i].score);
 			yPos += 30;
 			xPos = 60;
@@ -290,24 +306,24 @@ void showRecords() {
 	}
 	else
 		printText(xPos, yPos, "Рекордов не установлено");
-	menuBtn.CreateButton(15);
-	if (menuBtn.isClicked(x, y) && btnStart == GLUT_LEFT_BUTTON && btnState == GLUT_UP) {
+	backBtn.CreateButton();
+	if (backBtn.isClicked(x, y) && btnStart == GLUT_LEFT_BUTTON && btnState == GLUT_UP) {
 		process = MENUPROC;
 		btnStart = -1;
 	}
 }
 
-int readFile(char *path) {
-	int output = -1;
-	FILE *file = fopen(path, "r");
-	if (file != NULL) {
-		while (fscanf(file, "%d", &output)) {
-			fclose(file);
-			return output;
-		}
-	}
-	return output;
-}
+//int readFile(char *path) {
+//	int output = -1;
+//	FILE *file = fopen(path, "r");
+//	if (file != NULL) {
+//		while (fscanf(file, "%d", &output)) {
+//			fclose(file);
+//			return output;
+//		}
+//	}
+//	return output;
+//}
 
 char *loadLvl(char *path) {
 	FILE *file;
@@ -315,7 +331,7 @@ char *loadLvl(char *path) {
 	if (file != NULL) {
 		fseek(file, 0, SEEK_END);
 		int size = ftell(file);
-		int buffSize = width / blockWidth;
+		int buffSize = windowWidth / blockWidth;
 		fseek(file, 0, SEEK_SET);
 		char *buff = (char*)calloc(buffSize, sizeof(char));
 		char *dest = (char*)calloc(size, sizeof(char));
@@ -331,49 +347,96 @@ char *loadLvl(char *path) {
 	return NULL;
 }
 
+void setBonus(int blockNumber) {
+	bonus.bonusType = rand() % 3;
+	bonus.x = blocks[blockNumber].xb;
+	bonus.y = blocks[blockNumber].yb;
+	bonus.move = false;
+	bonusAmount++;
+}
+
+void initBonuses() {
+	int num;
+	for (int i = 0; i < blockAmount; i++) {
+		num = rand() % 7;
+		if (num % 6 == 0) {
+			setBonus(i);
+			bonuses.push_back(bonus);
+		}
+	}
+}
+
 void initMenuButtons() {
 	int btnHeight = 40;
 	int lineSpace = btnHeight + 50;
-	playBtn.setButtonPosition(width / 2 - btnWidth / 2, height / 4, btnWidth, btnHeight, playBtnTex);
-	recordsBtn.setButtonPosition(width / 2 - btnWidth / 2, height / 4 + lineSpace, btnWidth, btnHeight, recBtnTex);
-	exitBtn.setButtonPosition(width / 2 - btnWidth / 2, height / 4 + 2 * lineSpace, btnWidth, btnHeight, exitBtnTex);
+	playBtn.setButtonPosition(windowWidth / 2 - btnWidth / 2, windowHeight / 4, btnWidth, btnHeight, playBtnTex);
+	recordsBtn.setButtonPosition(windowWidth / 2 - btnWidth / 2, windowHeight / 4 + lineSpace, btnWidth, btnHeight, recBtnTex);
+	exitBtn.setButtonPosition(windowWidth / 2 - btnWidth / 2, windowHeight / 4 + 2 * lineSpace, btnWidth, btnHeight, exitBtnTex);
 }
 
 void showMenu(){
 	initMenuButtons();
-	playBtn.CreateButton(PLAYBTN);
-	recordsBtn.CreateButton(RECORDSBTN);
-	exitBtn.CreateButton(EXITBTN);
+	playBtn.CreateButton();
+	recordsBtn.CreateButton();
+	exitBtn.CreateButton();
 }
 
 void initSubMenuButtons() {
 	int subMenuBtnH = 40, subMenuBtnW = 80;
-	menuBtn.setButtonPosition(width / 2 - subMenuBtnW / 2, 3*height / 4, subMenuBtnW, subMenuBtnH, menuBtnTex);
-	/*nextLvlBtn.setButtonPosition(width / 2 + subMenuBtnW, height / 2, subMenuBtnW, subMenuBtnH);*/
+	menuBtn.setButtonPosition(windowWidth / 2 - subMenuBtnW, 3*windowHeight / 4, subMenuBtnW, subMenuBtnH, menuBtnTex);
+	nextLvlBtn.setButtonPosition(windowWidth / 2 + subMenuBtnW, 3*windowHeight / 4, subMenuBtnW, subMenuBtnH, nextLvlBtnTex);
+	backBtn.setButtonPosition(windowWidth / 2 - subMenuBtnW/2, 3 * windowHeight / 4, subMenuBtnW, subMenuBtnH, backBtnTex);
 }
 
 void addSubMenuButtons() {
-	nextLvlBtn.CreateButton(16);
-	menuBtn.CreateButton(15);
+	nextLvlBtn.CreateButton();
+	menuBtn.CreateButton();
+}
+
+void addBall() {
+	ball.x = xLeftPlatePos + plateWidth / 2;
+	ball.y = yPlatePos - ball.radius;
+	ball.move = false;
+	balls.push_back(ball);
+	ballsAmount++;
+}
+
+void loadLvl(int i) {
+	char lvlPath[10] = "lvl_", lvl[4] = "";
+	_itoa(i + 1, lvl, 10);
+	strcat(lvlPath, lvl);
+	strcat(lvlPath, ".txt");
+	process = GAMEPROC;
+	btnStart = -1;
+	yAngle = 1.0;
+	if (mode == TRAINMODE || i == 0) {
+		lifes = 3;
+		score = 0;
+	}
+	initBlocks(lvlPath);
+	initBonuses();
+	addBall();
+	glutSetCursor(GLUT_CURSOR_NONE);
 }
 
 void subMenu() {
 	char *lvlPath;
-	initSubMenuButtons();
+	
 	addSubMenuButtons();
+	printText(windowWidth / 2 - strlen("Score : 10000")*6, windowHeight / 4, "Score : ");
+	printText(windowWidth / 2, windowHeight / 4, score);
 	if (menuBtn.isClicked(x, y) && btnStart == GLUT_LEFT_BUTTON && btnState == GLUT_UP) {
 		process = MENUPROC;
 		btnStart = -1;
 	}
 	else if (nextLvlBtn.isClicked(x, y) && btnStart == GLUT_LEFT_BUTTON && btnState == GLUT_UP) {
-		process = GAMEPROC;
+		loadLvl(trainModeLvlPassed);
 		btnStart = -1;
-		score = 0;
 	}
 }
 
 void initLvlMenu() {
-	int lvlBtnH = 60, lvlBtnW = 80, xSpacing = 120, ySpacing = 50, t = 0;
+	int lvlBtnH = 60, lvlBtnW = 80, xSpacing = 120, ySpacing = 30, t = 0;
 	for (int i = 0; i < 10; i++) {
 		if ((i) % 2 == 0 && i != 0) {
 			ySpacing += 3 * lvlBtnH / 2;
@@ -388,11 +451,12 @@ void initLvlMenu() {
 
 void addLvlMenu() {
 	for (int i = 0; i < 10; i++)
-		lvlBtns[i].CreateButton(i + 1);
+		lvlBtns[i].CreateButton();
+	backBtn.CreateButton();
 }
 
 void initGameModeMenu() {
-	int modeBtnH = 40, modeBtnW = 100, xSpacing = width / 2 - modeBtnW, ySpacing = height / 2 - modeBtnH/2;
+	int modeBtnH = 40, modeBtnW = 100, xSpacing = windowWidth / 2 - modeBtnW, ySpacing = windowHeight / 2 - modeBtnH/2;
 	gameModeButtons[0].setButtonPosition(xSpacing - 20, ySpacing, modeBtnW, modeBtnH, normalBtnTex);
 	xSpacing += 30 + modeBtnW;
 	gameModeButtons[1].setButtonPosition(xSpacing - 20, ySpacing, modeBtnW, modeBtnH, trainBtnTex);
@@ -400,8 +464,9 @@ void initGameModeMenu() {
 
 void showGameModeMenu() {
 	for (int i = 0; i < 2; i++) {
-		gameModeButtons[i].CreateButton(i + 10);
+		gameModeButtons[i].CreateButton();
 	}
+	backBtn.CreateButton();
 }
 
 void selectGameMode() {
@@ -420,6 +485,8 @@ void selectGameMode() {
 				}
 				return;
 			}
+			if (backBtn.isClicked(x, y) && btnState == GLUT_UP)
+				process = MENUPROC;
 		}
 	}
 }
@@ -453,6 +520,16 @@ bool levelPassed() {
 	return false;
 }
 
+bool hasBonus(int blockIndx, int &bonusIndex) {
+	for (int i = 0; i < bonusAmount; i++) {
+		if (blocks[blockIndx].xb == bonuses[i].x && blocks[blockIndx].yb == bonuses[i].y) {
+			bonusIndex = i;
+			return true;
+		}
+	}
+	return false;
+}
+
 void reboundDir(){
 	if (yPrevPlatePos < xLeftPlatePos && xAngle > 0 || yPrevPlatePos > xLeftPlatePos && xAngle < 0)
 		yAngle *= -1;
@@ -466,21 +543,23 @@ void reboundDir(){
 
 bool verticalRebound(int blockIndex) {
 	for (int i = 0; i < ballsAmount; i++) {
-		if (balls[i].y + balls[i].radius == blocks[blockIndex].yb && balls[i].x >= blocks[blockIndex].xb && balls[i].x <= blocks[blockIndex].xb + blockWidth || balls[i].y - balls[i].radius == blocks[blockIndex].yb + blockHeight && balls[i].x >= blocks[blockIndex].xb && balls[i].x <= blocks[blockIndex].xb + blockWidth) {
+		if(balls[i].y + balls[i].radius == blocks[blockIndex].yb || balls[i].y - balls[i].radius - blockHeight == blocks[blockIndex].yb)
+		if (blocks[blockIndex].yb && balls[i].x >= blocks[blockIndex].xb && balls[i].x <= blocks[blockIndex].xb + blockWidth || balls[i].y - balls[i].radius == blocks[blockIndex].yb + blockHeight && balls[i].x >= blocks[blockIndex].xb && balls[i].x <= blocks[blockIndex].xb + blockWidth) {
 			yAngle *= -1;
+			cout << "xBall = " << balls[i].x << "  yBall = " << balls[i].y << "  blockX = " << blocks[i].xb << "  blockY = " << blocks[i].yb << endl;
 			return true;
 		}
 	}
 	return false;
 }
 
-bool hasBonus(int blockNum, int &index) {
-	for (int i = 0; i < bonusAmount; i++) {
-		if (blocks[blockNum].xb == bonuses[i].x && blocks[blockNum].yb == bonuses[i].y) {
-			index = i;
-			return true;
-		}
-	}
+
+bool isTouch(int i, int j) {
+	if (balls[i].y + balls[i].radius >= blocks[j].yb
+		&& balls[i].y - balls[i].radius <= blocks[j].yb + blockHeight
+		&& balls[i].x + balls[i].radius >= blocks[j].xb
+		&& balls[i].x - balls[i].radius <= blocks[j].xb + blockWidth)
+		return true;
 	return false;
 }
 
@@ -496,10 +575,11 @@ void collision(){
 	int index;
 	for (int i = 0; i < ballsAmount; i++) {
 		for (int j = 0; j < blockAmount; j++) {
-			if (balls[i].y + balls[i].radius >= blocks[j].yb && balls[i].y - balls[i].radius <= blocks[j].yb + blockHeight && balls[i].x + balls[i].radius >= blocks[j].xb && balls[i].x - balls[i].radius <= blocks[j].xb + blockWidth) {
+			if (isTouch(i, j)) {
 				if (!verticalRebound(j))
 					xAngle *= -1;
 				blocks[j].durability--;
+				blocks[j].tex = blocksTex[blocks[j].durability-1];
 				score += setScore(lifes);
 			}
 			if (blocks[j].durability == 0) {
@@ -512,25 +592,6 @@ void collision(){
 	}
 }
 
-void setBonus(int blockNumber) {
-	bonus.bonusType = rand() % 3;
-	bonus.x = blocks[blockNumber].xb;
-	bonus.y = blocks[blockNumber].yb;
-	bonus.move = false;
-	bonusAmount++;
-}
-
-void initBonuses() {
-	int num;
-	for (int i = 0; i < blockAmount; i++) {
-		num = rand() % 7;
-		if (num % 6 == 0) {
-			setBonus(i);
-			bonuses.push_back(bonus);
-		}
-	}
-}
-
 void setBlockAmount(char *lvl) {
 	for (int i = 0; i < strlen(lvl); i++) {
 		if (lvl[i] != '0' && lvl[i] != '\n')
@@ -538,33 +599,10 @@ void setBlockAmount(char *lvl) {
 	}
 }
 
-void addBall() {
-	ball.x = xLeftPlatePos + plateWidth / 2;
-	ball.y = yPlatePos - ball.radius;
-	ball.move = false;
-	balls.push_back(ball);
-	ballsAmount++;
-}
-
 bool isLvlOpen(int lvl) {
-	if (lvl <= lvlsPassed)
+	if (lvl <= availableLvls)
 		return true;
 	return false;
-}
-
-void loadLvl(int i) {
-	char lvlPath[10] = "lvl_", lvl[4] = "";
-	_itoa(i + 1, lvl, 10);
-		strcat(lvlPath, lvl);
-		strcat(lvlPath, ".txt");
-		process = GAMEPROC;
-		btnStart = -1;
-		if(mode == TRAINMODE || i == 0)
-		lifes = 3;
-		initBlocks(lvlPath);
-		initBonuses();
-		addBall();
-		glutSetCursor(GLUT_CURSOR_NONE);
 }
 
 void selectLvl() {
@@ -572,12 +610,15 @@ void selectLvl() {
 		for (int i = 0; i < 10; i++) {
 			if (lvlBtns[i].isClicked(x, y) && btnState == GLUT_UP) {
 				if (isLvlOpen(i + 1)) {
-					if (lvlsPassed = i + 1)
+					if (availableLvls = i + 1)
 						nextLvl = true;
 					loadLvl(i);
+					trainModeLvlPassed = i;
 				}
 				break;
 			}
+			if (backBtn.isClicked(x, y) && btnState == GLUT_UP)
+				process = SELECTMODEPROC;
 		}
 	}
 }
@@ -599,6 +640,7 @@ void initBlocks(char *lvlPath) {
 				item.xb = xSpasing;
 				item.yb = ySpacing;
 				item.durability = lvlMap[i] - 48;
+				item.tex = blocksTex[item.durability-1];
 				blocks.push_back(item);
 				t++;
 				xSpasing += blockWidth + 5;
@@ -607,17 +649,6 @@ void initBlocks(char *lvlPath) {
 				xSpasing += blockWidth + 5;
 		}
 	}
-}
-
-void switchColor(int color) {
-	if (color == 1) 
-		glColor3f(1.0, 0.0, 0.0);
-	else if (color == 2) 
-		glColor3f(0.7, 0.0, 0.0);
-	else if (color == 3) 
-		glColor3f(0.5, 0.0, 0.0);
-	else
-		glColor3f(0.3, 0.0, 0.0);
 }
 
 void clearData() {
@@ -635,26 +666,21 @@ void lvlPassed(int mode) {
 		normalModeLvlPassed++;
 	}
 	else {
-		if (nextLvl)
-			lvlsPassed++;
+		if (nextLvl) {
+			availableLvls++;
+			trainModeLvlPassed++;
+		}
 		nextLvl = false;
-		process = TRAINMODE;
-		score = 0;
+		process = SUBMENUPROC;
 	}
 	yAngle = 1.0;
-	saveProgress();
+	saveProgress(availableLvls);
 	clearData();
 }
 
 void ViewBlocks(){
 	for (int i = 0; i < blockAmount; i++){
-		switchColor(blocks[i].durability);
-		glBegin(GL_POLYGON);
-		glVertex2f(blocks[i].xb, blocks[i].yb);
-		glVertex2f(blocks[i].xb, blocks[i].yb + blockHeight);
-		glVertex2f(blocks[i].xb + blockWidth, blocks[i].yb + blockHeight);
-		glVertex2f(blocks[i].xb + blockWidth, blocks[i].yb);
-		glEnd();
+		drawTexture(blocks[i].xb, blocks[i].yb, blockWidth, blockHeight, blocks[i].tex);
 	}
 	if (blockAmount == 0) {
 		lvlPassed(mode);
@@ -663,7 +689,7 @@ void ViewBlocks(){
 
 void platePosition() {
 	yPrevPlatePos = xLeftPlatePos;
-	if (xMousePos >= plateWidth / 2 && xMousePos <= width - plateWidth / 2) {
+	if (xMousePos >= plateWidth / 2 && xMousePos <= windowWidth - plateWidth / 2) {
 		xLeftPlatePos = xMousePos - plateWidth / 2;
 		xRightPlatePos = xMousePos + plateWidth / 2;
 	}
@@ -672,8 +698,8 @@ void platePosition() {
 		xRightPlatePos = plateWidth;
 	}
 	else {
-		xLeftPlatePos = width - plateWidth;
-		xRightPlatePos = width;
+		xLeftPlatePos = windowWidth - plateWidth;
+		xRightPlatePos = windowWidth;
 	}
 }
 
@@ -701,7 +727,7 @@ void plateRebound() {
 }
 
 void wallsRebound(int x, int y, int r) {
-	if (x - r <= 0 || x + r >= width)
+	if (x - r <= 0 || x + r >= windowWidth)
 		xAngle *= -1;
 	if (y + r <= 0)
 		yAngle *= -1;
@@ -710,6 +736,7 @@ void wallsRebound(int x, int y, int r) {
 bool ballLose(int x, int y) {
 	if (y > yPlatePos + 40) {
 		btnStart = -1;
+		yAngle = 1.0;
 		lifes--;
 		return true;
 		if (lifes == 0)
@@ -790,8 +817,8 @@ void activeBonuses() {
 }
 
 void printGameInfo() {
-	printText(width / 2, height - 60, score);
-	printText(width / 2, height - 30, lifes);
+	printText(windowWidth / 2, windowHeight - 60, score);
+	printText(windowWidth / 2, windowHeight - 30, lifes);
 }
 
 bool isRecord() {
@@ -820,11 +847,12 @@ void addRecord() {
 void game() {
 	if (lifes > 0) {
 		printGameInfo();
-		collision();
 		drawBall();
+		collision();
+		
 		activeBonuses();
-		ViewBlocks();
 		drawPlate();
+		ViewBlocks();
 	}
 	else {
 		if (isRecord() && mode == NORMALMODE) {
@@ -832,7 +860,7 @@ void game() {
 			strcpy(record.name, "");
 		}
 		else
-			process = MENUPROC;
+			process = SUBMENUPROC;
 		clearData();
 	}
 }
@@ -841,7 +869,7 @@ void display(){
 	
 	glClear(GL_COLOR_BUFFER_BIT);
 	glLoadIdentity();
-	drawTexture(0, 0, width, height, bgTexture);
+	drawTexture(0, 0, windowWidth, windowHeight, bgTexture);
 	if(process != GAMEPROC)
 		glutSetCursor(GLUT_CURSOR_LEFT_ARROW);
 	switch (process) {
@@ -887,14 +915,291 @@ void display(){
 void reshape(int w, int h){
 	int wh = w / h;
 
-	width = w;
-	height = h;
+	windowWidth = w;
+	windowHeight = h;
 
 	glViewport(0, 0, w, h);
 	glMatrixMode(GL_PROJECTION);
 	glLoadIdentity();
-	gluOrtho2D(0, width, height, 0);
+	gluOrtho2D(0, windowWidth, windowHeight, 0);
 	glMatrixMode(GL_MODELVIEW);
-	plateWidth = width / 4;
-	yPlatePos = 2 * height / 3;
+	plateWidth = windowWidth / 4;
+	yPlatePos = 2 * windowHeight / 3;
 }
+
+
+
+
+
+//#include <iostream>
+//#include <windows.h>  
+//#include <gl\GL.h>
+//#include <gl\GLU.h>
+//#include <GL\glut.h> 
+//#include "glaux.h"
+//#pragma comment(lib,"glaux.lib")
+//
+//using namespace std;
+//
+//int n = 0;
+//
+//float angle = 0.0f;
+//unsigned int Textures[1];
+//GLuint texture[1];
+//
+//int sX = 0, sY = 0;
+//bool MOUSE_CLICK = false;
+//double rotate_y = 0;
+//double rotate_x = 0;
+//bool A = true;
+//
+//void MouseMove(int ax, int ay) {
+//	ax -= 180;
+//	//ay += 180;
+//	rotate_x = ay;
+//	rotate_y = ax;
+//	glutPostRedisplay();
+//}
+//	
+//	void resize(int w, int h) {
+//		glutPostRedisplay();
+//		if (h == 0)
+//			h = 1;
+//		float ratio = w * 1.0 / h;
+//		glMatrixMode(GL_PROJECTION);//Изменяем матрицу на проекционную для работы с данными этой самой матрицы
+//		glLoadIdentity();//Загружаем матрицу
+//		glViewport(0, 0, (GLsizei)w, (GLsizei)h);
+//		gluPerspective(45.0f, ratio, 0.1f, 90.0f);
+//		glMatrixMode(GL_MODELVIEW);//Возвращаем матрицу к нормальному виду
+//		glLoadIdentity();//Загружаем матрицу
+//	}
+//
+//void InitTexture(unsigned int& texture1)
+//{
+//	GLfloat mat_specular[] = { 1, 1, 1, 1 };
+//	glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, mat_specular);
+//	glMaterialf(GL_FRONT_AND_BACK, GL_SHININESS, 128.0);
+//	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+//
+//	AUX_RGBImageRec* image1 = auxDIBImageLoad("22.bmp");
+//	if (image1 == 0) exit(1);
+//
+//	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+//	glPixelZoom(1, 1);
+//	glGenTextures(1, &texture1);
+//
+//
+//	glBindTexture(GL_TEXTURE_2D, texture1);
+//	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+//	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+//	gluBuild2DMipmaps(GL_TEXTURE_2D, GL_RGB, image1->sizeX, image1->sizeY, GL_RGB, GL_UNSIGNED_BYTE, image1->data);
+//}
+//
+//void specialKeys(int key, int x, int y) {
+//
+//	if (key == GLUT_KEY_RIGHT)
+//		rotate_y -= 5;
+//
+//	else if (key == GLUT_KEY_LEFT)
+//		rotate_y += 5;
+//
+//	else if (key == GLUT_KEY_UP)
+//		rotate_x += 5;
+//
+//	else if (key == GLUT_KEY_DOWN)
+//		rotate_x -= 5;
+//
+//	glutPostRedisplay();
+//
+//}
+//
+//
+//void Initialization() {
+//	glClear(GL_COLOR_BUFFER_BIT);
+//	glClearColor(1.0, 1.0, 1.0, 0);
+//	glMatrixMode(GL_PROJECTION);
+//	glLoadIdentity();
+//	glShadeModel(GL_FLAT);
+//	glEnable(GL_CULL_FACE);
+//
+//
+//	glMatrixMode(GL_MODELVIEW);
+//}
+//
+//void displays() {
+//	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+//	glClearColor(1.0, 1.0, 1.0, 0.0);
+//
+//	glEnable(GL_TEXTURE_2D);
+//	glBindTexture(GL_TEXTURE_2D, Textures[0]);
+//
+//	glLoadIdentity();
+//
+//	gluLookAt(0.0f, 10.0f, 20.0f,
+//			0.0f, 0.0f, 0.0f,
+//			0.0f, 5.0f, 4.0f);
+//	
+//	
+//	glRotatef(rotate_x, 1.0, 0.0, 0.0);
+//	glRotatef(rotate_y, 0.0, 1.0, 0.0);
+//	//"Б"
+//
+//	/*glColor3d(1, 0, 0);
+//	glBegin(GL_QUAD_STRIP);
+//	glNormal3f(0.0, 0.0, 1.0);
+//	glVertex3f(-2.1, 4.6, 1.01); glTexCoord2d(0, 0);
+//	glVertex3f(-1, 4.6, 1.01); glTexCoord2d(0, 1);
+//	glVertex3f(-2.1, -2.1, 1.01); glTexCoord2d(1, 1);
+//	glVertex3f(-1, -2.1, 1.01); glTexCoord2d(1, 0);
+//	glEnd();
+//
+//	glBegin(GL_QUAD_STRIP);
+//	glColor3d(0, 1, 0);
+//	glNormal3f(0.0, 0.0, 1.0);
+//	glVertex3f(-2.1, 4.6, -0.01); glTexCoord2d(0, 0);
+//	glVertex3f(-1, 4.6, -0.01); glTexCoord2d(0, 1);
+//	glVertex3f(-2.1, -2.1, -0.01); glTexCoord2d(1, 1);
+//	glVertex3f(-1, -2.1, -0.01); glTexCoord2d(1, 0);
+//	glEnd();
+//
+//	glBegin(GL_QUAD_STRIP);
+//	glColor3d(0, 0, 1);
+//	glNormal3f(-2.1, 0.0, 0.0);
+//	glVertex3f(-2.1, 4.6, -0.01); glTexCoord2d(0, 0);
+//	glVertex3f(-2.1, 4.6, 1.01); glTexCoord2d(0, 1);
+//	glVertex3f(-2.1, -2.1, -0.01); glTexCoord2d(1, 1);
+//	glVertex3f(-2.1, -2.1, 1.01); glTexCoord2d(1, 0);
+//	glEnd();
+//
+//	glBegin(GL_QUAD_STRIP);
+//	glColor3d(0, 0, 1);
+//	glNormal3f(-1.1, 0.0, 0.0);
+//	glVertex3f(-2.1, 4.6, -0.01); glTexCoord2d(0, 0);
+//	glVertex3f(-2.1, 4.6, 1.01); glTexCoord2d(0, 1);
+//	glVertex3f(1.5, 4.6, -0.01); glTexCoord2d(1, 1);
+//	glVertex3f(1.5, 4.6, 1.01); glTexCoord2d(1, 0);
+//	glEnd();
+//
+//	glBegin(GL_QUAD_STRIP);
+//	glColor3d(0, 0, 1);
+//	glNormal3f(-1.1, 0.0, 0.0);
+//	glVertex3f(-1.1, 4.6, -0.01); glTexCoord2d(0, 0);
+//	glVertex3f(-1.1, 4.6, 1.01); glTexCoord2d(0, 1);
+//	glVertex3f(-1.1, -2.1, -0.01); glTexCoord2d(1, 1);
+//	glVertex3f(-1.1, -2.1, 1.01); glTexCoord2d(1, 0);
+//	glEnd();
+//
+//	glColor3d(1, 0, 0);
+//	glBegin(GL_QUAD_STRIP);
+//	glNormal3f(0.0, 0.0, 1.0);
+//	glVertex3f(-2.1, 4.6, 1.01); glTexCoord2d(0, 0);
+//	glVertex3f(1.5, 4.6, 1.01); glTexCoord2d(0, 1);
+//	glVertex3f(-2.1, 3.6, 1.01); glTexCoord2d(1, 1);
+//	glVertex3f(1.5, 3.6, 1.01); glTexCoord2d(1, 0);
+//	glEnd();
+//
+//	glColor3d(1, 0, 0);
+//	glBegin(GL_QUAD_STRIP);
+//	glNormal3f(0.0, 0.0, 1.0);
+//	glVertex3f(-2.1, 4.6, -0.01); glTexCoord2d(0, 0);
+//	glVertex3f(1.5, 4.6, -0.01); glTexCoord2d(0, 1);
+//	glVertex3f(-2.1, 3.6, -0.01); glTexCoord2d(1, 1);
+//	glVertex3f(1.5, 3.6, -0.01); glTexCoord2d(1, 0);
+//	glEnd();
+//
+//	glBegin(GL_QUAD_STRIP);
+//	glColor3d(1, 0, 1);
+//	glNormal3f(-1.1, 0.0, 0.0);
+//	glVertex3f(-2.1, 3.6, -0.01); glTexCoord2d(0, 0);
+//	glVertex3f(-2.1, 3.6, 1.01); glTexCoord2d(0, 1);
+//	glVertex3f(1.5, 3.6, -0.01); glTexCoord2d(1, 1);
+//	glVertex3f(1.5, 3.6, 1.01); glTexCoord2d(1, 0);
+//	glEnd();
+//
+//	glBegin(GL_QUAD_STRIP);
+//	glColor3d(1, 0, 1);
+//	glNormal3f(-1.1, 0.0, 0.0);
+//	glVertex3f(-2.1, -2.1, -0.01); glTexCoord2d(0, 0);
+//	glVertex3f(-2.1, -2.1, 1.01); glTexCoord2d(0, 1);
+//	glVertex3f(-1.1, -2.1, -0.01); glTexCoord2d(1, 1);
+//	glVertex3f(-1.1, -2.1, 1.01); glTexCoord2d(1, 0);
+//	glEnd();
+//
+//	glBegin(GL_QUAD_STRIP);
+//	glColor3d(0, 0, 1);
+//	glNormal3f(-2.1, 0.0, 0.0);
+//	glVertex3f(1.5, 4.6, -0.01); glTexCoord2d(0, 0);
+//	glVertex3f(1.5, 4.6, 1.01); glTexCoord2d(0, 1);
+//	glVertex3f(1.5, 3.6, -0.01); glTexCoord2d(1, 1);
+//	glVertex3f(1.5, 3.6, 1.01); glTexCoord2d(1, 0);
+//	glEnd();
+//	*/
+//
+//	/*float r1 = 1.0, r2 = 2.0, r = 1.0;
+//	glBegin(GL_POINTS);
+//	for (float j = 0; j < 1; j += 0.01) {
+//		for (float i = 0.0; i <= 2*3.1415; i += 0.01) {
+//			glTexCoord2d(sin(i)*r1, cos(i)*r1);
+//			glVertex3f((sin(i)*r1), (cos(i)*r1), j);
+//			glVertex3f((sin(i)*r), (cos(i)*r), 0);
+//			glVertex3f((sin(i)*r), (cos(i)*r), 1);
+//			glVertex3f((sin(i)*r2), (cos(i)*r2), j);
+//		}
+//		r += 0.01;
+//	}*/
+//		
+//		
+//		
+//			float r1 = 1.5, r2 = 2.5, r = 1.5;
+//			float threePI = 3 * 3.1415, twoPI = 2*3.1415;
+//	//"З"
+//			glBegin(GL_POINTS);
+//			for (float j = 0; j < 1; j += 0.01) {
+//				for (float i = 0.0; i <= threePI / 2; i += 0.01) {
+//					glTexCoord2d(sin(i)*r1, cos(i)*r1);
+//					glVertex3f((sin(i)*r1), (cos(i)*r1), j);
+//					glVertex3f((sin(i)*r), (cos(i)*r), 0);
+//					glVertex3f((sin(i)*r), (cos(i)*r), 1);
+//					glVertex3f((sin(i)*r2), (cos(i)*r2), j);
+//				}
+//				r += 0.01;
+//			}
+//			r = 1.5;
+//			for (float j = 0; j < 1; j += 0.01) {
+//				for (float i = twoPI / 2; i >= -threePI/12; i -= 0.01) {
+//					glTexCoord2d(sin(i)*r1, cos(i)*r1);
+//					glVertex3f((sin(i)*r1), 2 * r1 + (cos(i)*r1) + 1, j);
+//					glVertex3f((sin(i)*r), 2 * r1 + (cos(i)*r) + 1, 0);
+//					glVertex3f((sin(i)*r2), 2 * r2 + (cos(i)*r2) - 1, j);
+//					glVertex3f((sin(i)*r), 2 * r1 + (cos(i)*r) + 1, 1);
+//				}
+//				r += 0.01;
+//			}
+//			glEnd();
+//			glFlush();
+//		
+//	glutSwapBuffers();
+//}
+//
+//
+//int main(int argc, char* argv[]) {
+//
+//	glutInit(&argc, argv);
+//	glutInitDisplayMode(GLUT_SINGLE | GLUT_RGBA);
+//	glutInitWindowSize(1000, 1000);
+//
+//	glutCreateWindow("8");
+//	glClearColor(1.0, 1.0, 1.0, 0);
+//	glEnable(GL_DEPTH_TEST);
+//	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_DECAL);
+//	InitTexture(Textures[0]);
+//	glutDisplayFunc(displays);
+//	glutMotionFunc(MouseMove);
+//	glutSpecialFunc(specialKeys);
+//	glutReshapeFunc(resize);
+//	glutMainLoop();
+//
+//
+//	return 0;
+//}
+
